@@ -1,0 +1,1051 @@
+---
+title: Vue3 基础面试题
+description: Vue3 核心知识点梳理，涵盖生命周期、组件通信、修饰符、指令、响应式API等
+---
+
+# Vue3 基础面试题
+
+本文梳理了 Vue3 面试核心考察点，涵盖生命周期、组件通信、修饰符、指令、响应式 API、插槽和侦听器等主题。
+
+---
+
+## 一、生命周期
+
+### 核心变化
+
+#### 1. 组合式 API 的引入
+
+在 Vue3 中，`setup()` 函数替代了 `beforeCreate` 和 `created` 钩子。生命周期钩子需要从 Vue 显式导入并添加 `on` 前缀。
+
+```js
+import { onMounted, onUpdated, onUnmounted } from 'vue'
+
+export default {
+  setup() {
+    onMounted(() => {
+      console.log('组件已挂载')
+    })
+    
+    onUpdated(() => {
+      console.log('组件已更新')
+    })
+    
+    onUnmounted(() => {
+      console.log('组件已卸载')
+    })
+  }
+}
+```
+
+#### 2. 钩子函数重命名
+
+| Vue2 | Vue3 |
+|------|------|
+| `beforeDestroy` | `onBeforeUnmount` |
+| `destroyed` | `onUnmounted` |
+
+#### 3. 新增钩子
+
+- **`onServerPrefetch`**：SSR 中进行数据获取
+- **`onRenderTracked`**：调试钩子，跟踪响应式依赖
+- **`onRenderTriggered`**：调试钩子，响应式依赖触发时调用
+
+### 生命周期阶段
+
+#### 初始化阶段
+
+在 `setup()` 函数中初始化响应式数据，此时**无法访问 `this`**。
+
+```js
+setup() {
+  const count = ref(0)
+  const message = reactive({ text: 'Hello' })
+  
+  // 初始化逻辑
+  console.log('setup 执行')
+  
+  return { count, message }
+}
+```
+
+#### 挂载阶段
+
+- **`onBeforeMount`**：组件挂载前调用
+- **`onMounted`**：组件挂载后调用，可访问 DOM
+
+```js
+onBeforeMount(() => {
+  console.log('即将挂载')
+})
+
+onMounted(() => {
+  console.log('已挂载，可访问 DOM')
+})
+```
+
+#### 更新阶段
+
+- **`onBeforeUpdate`**：数据更新前调用
+- **`onUpdated`**：数据更新后调用
+
+⚠️ **注意**：避免在 `onUpdated` 中修改状态，可能导致无限循环。
+
+#### 卸载阶段
+
+- **`onBeforeUnmount`**：组件卸载前调用
+- **`onUnmounted`**：组件卸载后调用，清理定时器、监听器等
+
+```js
+onBeforeUnmount(() => {
+  console.log('即将卸载')
+})
+
+onUnmounted(() => {
+  console.log('已卸载，清理资源')
+})
+```
+
+### 父子组件执行顺序
+
+挂载时的执行顺序：
+
+```
+父 BeforeMount → 子 BeforeMount → 子 Mounted → 父 Mounted
+```
+
+更新时的执行顺序：
+
+```
+父 BeforeUpdate → 子 BeforeUpdate → 子 Updated → 父 Updated
+```
+
+---
+
+## 二、组件通信
+
+### 8 种通信方式
+
+#### 1. Props / Emits（父子通信基础）
+
+使用 `defineProps` 和 `defineEmits` 显式声明。
+
+```vue
+<!-- 父组件 -->
+<template>
+  <Child :message="msg" @update="handleUpdate" />
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import Child from './Child.vue'
+
+const msg = ref('Hello')
+const handleUpdate = (val) => {
+  msg.value = val
+}
+</script>
+```
+
+```vue
+<!-- 子组件 -->
+<script setup>
+const props = defineProps({
+  message: String
+})
+
+const emit = defineEmits(['update'])
+
+const sendUpdate = () => {
+  emit('update', 'New Value')
+}
+</script>
+```
+
+#### 2. v-model（双向绑定）
+
+Vue3 支持多个 `v-model` 绑定。
+
+```vue
+<!-- 父组件 -->
+<Child v-model:title="title" v-model:content="content" />
+
+<!-- 子组件 -->
+<script setup>
+const props = defineProps(['title', 'content'])
+const emit = defineEmits(['update:title', 'update:content'])
+
+const updateTitle = (val) => emit('update:title', val)
+const updateContent = (val) => emit('update:content', val)
+</script>
+```
+
+#### 3. ref / expose（父访问子）
+
+父组件通过 `ref` 访问子组件暴露的方法或属性。
+
+```vue
+<!-- 父组件 -->
+<template>
+  <Child ref="childRef" />
+  <button @click="callChild">调用子组件方法</button>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+
+const childRef = ref(null)
+
+const callChild = () => {
+  childRef.value.childMethod()
+}
+</script>
+```
+
+```vue
+<!-- 子组件 -->
+<script setup>
+const childMethod = () => {
+  console.log('子组件方法被调用')
+}
+
+// 暴露方法给父组件
+defineExpose({
+  childMethod
+})
+</script>
+```
+
+#### 4. provide / inject（跨层级依赖注入）
+
+用于祖先组件向所有后代组件传递数据，无论层级多深。
+
+```vue
+<!-- 祖先组件 -->
+<script setup>
+import { provide, ref } from 'vue'
+
+const theme = ref('dark')
+provide('theme', theme)
+</script>
+
+<!-- 后代组件 -->
+<script setup>
+import { inject } from 'vue'
+
+const theme = inject('theme', 'light') // 第二个参数为默认值
+</script>
+```
+
+#### 5. 事件总线（第三方库）
+
+Vue3 移除了 `$on`、`$off` 方法，推荐使用第三方库如 `mitt`。
+
+```js
+// eventBus.js
+import mitt from 'mitt'
+export const emitter = mitt()
+
+// 组件 A
+import { emitter } from './eventBus'
+emitter.emit('customEvent', data)
+
+// 组件 B
+import { emitter } from './eventBus'
+emitter.on('customEvent', (data) => {
+  console.log(data)
+})
+```
+
+#### 6. Pinia（状态管理）
+
+Pinia 是 Vue3 官方推荐的状态管理方案，替代 Vuex。
+
+```js
+// store.js
+import { defineStore } from 'pinia'
+
+export const useUserStore = defineStore('user', {
+  state: () => ({
+    name: 'John',
+    age: 25
+  }),
+  actions: {
+    updateName(newName) {
+      this.name = newName
+    }
+  }
+})
+
+// 组件中使用
+import { useUserStore } from './store'
+
+const userStore = useUserStore()
+console.log(userStore.name)
+userStore.updateName('Jane')
+```
+
+#### 7. $attrs（透传属性）
+
+透传父组件传递的非 props 属性（包括事件监听器）。
+
+```vue
+<!-- 父组件 -->
+<Child class="custom-class" @click="handleClick" data-id="123" />
+
+<!-- 子组件 -->
+<template>
+  <div v-bind="$attrs">
+    <!-- class, @click, data-id 会自动透传到这里 -->
+  </div>
+</template>
+
+<script setup>
+// 禁用自动透传
+defineOptions({
+  inheritAttrs: false
+})
+</script>
+```
+
+#### 8. 模板引用（直接操作 DOM）
+
+通过 `ref` 直接访问 DOM 元素。
+
+```vue
+<template>
+  <input ref="inputRef" />
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+
+const inputRef = ref(null)
+
+onMounted(() => {
+  inputRef.value.focus()
+})
+</script>
+```
+
+---
+
+## 三、修饰符
+
+- **`.stop`**：阻止事件冒泡
+
+```vue
+<button @click.stop="handleClick">点击</button>
+```
+
+- **`.prevent`**：阻止默认行为
+
+```vue
+<form @submit.prevent="onSubmit">提交</form>
+```
+
+- **`.once`**：事件只触发一次
+
+```vue
+<button @click.once="handleClick">只触发一次</button>
+```
+
+- **`.capture`**：使用事件捕获模式
+
+```vue
+<div @click.capture="handleClick">捕获阶段触发</div>
+```
+
+- **`.self`**：只在事件目标是元素自身时触发
+
+```vue
+<div @click.self="handleClick">只有点击自身时触发</div>
+```
+
+- **`.passive`**：提升移动端滚动性能
+
+```vue
+<div @scroll.passive="onScroll">滚动区域</div>
+```
+
+### v-model 修饰符
+
+- **`.lazy`**：失焦时才更新
+
+```vue
+<input v-model.lazy="message" />
+```
+
+- **`.number`**：自动转换为数值类型
+
+```vue
+<input v-model.number="age" type="number" />
+```
+
+- **`.trim`**：自动去除首尾空格
+
+```vue
+<input v-model.trim="username" />
+```
+
+### 键盘修饰符
+
+```vue
+<!-- 按下 Enter 键时触发 -->
+<input @keyup.enter="onEnter" />
+
+<!-- Ctrl + Click -->
+<div @click.ctrl="handleClick">Ctrl+点击</div>
+
+<!-- 精确匹配：只有 Ctrl 键按下时触发 -->
+<button @click.ctrl.exact="onClick">只有 Ctrl</button>
+```
+
+- ❌ **移除 `.sync` 修饰符**：改用 `v-model:propName`
+- ❌ **移除 `.native` 修饰符**：组件上的事件默认为原生事件
+- ✅ **支持自定义 v-model 修饰符**
+
+```vue
+<!-- 父组件 -->
+<Child v-model.capitalize="text" />
+
+<!-- 子组件 -->
+<script setup>
+const props = defineProps({
+  modelValue: String,
+  modelModifiers: { default: () => ({}) }
+})
+
+const emit = defineEmits(['update:modelValue'])
+
+const handleInput = (e) => {
+  let value = e.target.value
+  if (props.modelModifiers.capitalize) {
+    value = value.charAt(0).toUpperCase() + value.slice(1)
+  }
+  emit('update:modelValue', value)
+}
+</script>
+```
+
+---
+
+## 四、指令
+
+### 核心内置指令
+
+#### v-bind（缩写 `:`）
+
+动态绑定属性。
+
+```vue
+<img :src="imageUrl" :alt="description" />
+
+<!-- 动态绑定多个属性 -->
+<div v-bind="objectOfAttrs"></div>
+```
+
+#### v-model
+
+双向数据绑定。
+
+```vue
+<input v-model="message" />
+<textarea v-model="text"></textarea>
+<input type="checkbox" v-model="checked" />
+```
+
+#### v-if / v-else-if / v-else
+
+条件渲染，控制元素是否存在于 DOM 中。
+
+```vue
+<div v-if="type === 'A'">A</div>
+<div v-else-if="type === 'B'">B</div>
+<div v-else>其他</div>
+```
+
+#### v-show
+
+条件显示，通过 CSS 的 `display` 控制可见性。
+
+```vue
+<div v-show="isVisible">内容</div>
+```
+
+**v-if vs v-show**：
+
+| 特性 | v-if | v-show |
+|------|------|--------|
+| 切换开销 | 高（重新创建/销毁） | 低（仅切换 display） |
+| 初始渲染开销 | 低（条件为 false 不渲染） | 高（始终渲染） |
+| 使用场景 | 不频繁切换 | 频繁切换 |
+
+#### v-for
+
+列表渲染，**必须指定 `key`**。
+
+```vue
+<li v-for="(item, index) in items" :key="item.id">
+  {{ index }}: {{ item.name }}
+</li>
+
+<!-- 遍历对象 -->
+<div v-for="(value, key, index) in object" :key="key">
+  {{ key }}: {{ value }}
+</div>
+```
+
+⚠️ **注意**：避免 `v-if` 与 `v-for` 一起使用。Vue3 中 `v-if` 优先级更高。
+
+```vue
+<!-- ❌ 不推荐 -->
+<li v-for="item in items" v-if="item.isActive" :key="item.id">
+  {{ item.name }}
+</li>
+
+<!-- ✅ 推荐：先用 computed 过滤 -->
+<li v-for="item in activeItems" :key="item.id">
+  {{ item.name }}
+</li>
+```
+
+#### v-on（缩写 `@`）
+
+事件监听。
+
+```vue
+<button @click="handleClick">点击</button>
+<input @input="handleInput" />
+```
+
+#### v-html
+
+渲染 HTML 字符串。
+
+```vue
+<div v-html="htmlContent"></div>
+```
+
+⚠️ **安全警告**：仅在可信内容上使用，避免 XSS 攻击。
+
+#### v-once
+
+只渲染元素和组件一次，后续更新不会重新渲染。
+
+```vue
+<span v-once>{{ message }}</span>
+```
+
+#### v-cloak
+
+隐藏未编译的模板，防止闪烁。
+
+```vue
+<style>
+[v-cloak] {
+  display: none;
+}
+</style>
+
+<div v-cloak>{{ message }}</div>
+```
+
+### 自定义指令
+
+#### 定义自定义指令
+
+```js
+// 全局注册
+app.directive('focus', {
+  mounted(el) {
+    el.focus()
+  }
+})
+
+// 局部注册
+const vFocus = {
+  mounted: (el) => el.focus()
+}
+```
+
+#### 指令生命周期钩子
+
+Vue3 自定义指令的生命周期：
+
+- **`created`**：绑定元素创建时调用
+- **`beforeMount`**：指令绑定到元素前调用
+- **`mounted`**：元素插入到父节点后调用
+- **`beforeUpdate`**：元素更新前调用
+- **`updated`**：元素更新后调用
+- **`beforeUnmount`**：元素卸载前调用
+- **`unmounted`**：元素卸载后调用
+
+```js
+const vDemo = {
+  created(el, binding, vnode) {
+    console.log('created')
+  },
+  mounted(el, binding) {
+    console.log('mounted', binding.value)
+  },
+  updated(el, binding) {
+    console.log('updated', binding.value)
+  },
+  unmounted(el) {
+    console.log('unmounted')
+  }
+}
+```
+
+---
+
+### 核心对比表
+
+| 特性 | ref | reactive |
+|------|-----|----------|
+| **适用类型** | 基本类型或对象 | 对象/数组 |
+| **访问方式** | 需要 `.value` | 直接访问 |
+| **响应式原理** | 封装对象 + Proxy | Proxy 深层代理 |
+| **解构** | 需要 `toRefs` 保持响应性 | 需要 `toRefs` 保持响应性 |
+| **重新赋值** | 支持整体替换 | 不支持整体替换 |
+
+### ref 详解
+
+#### 基本用法
+
+```js
+import { ref } from 'vue'
+
+// 基本类型
+const count = ref(0)
+console.log(count.value) // 0
+count.value++
+
+// 对象类型
+const user = ref({ name: 'John', age: 25 })
+console.log(user.value.name) // John
+user.value.age = 26
+```
+
+#### 响应式原理
+
+`ref` 通过封装一个包含 `value` 属性的对象，并使用 `Proxy` 实现响应式。对于基本类型，这是唯一的响应式方案。
+
+```js
+// 可以整体替换
+const count = ref(0)
+count.value = 10 // ✅ 有效
+
+const user = ref({ name: 'John' })
+user.value = { name: 'Jane' } // ✅ 有效
+```
+
+### reactive 详解
+
+#### 基本用法
+
+```js
+import { reactive } from 'vue'
+
+const state = reactive({
+  count: 0,
+  user: {
+    name: 'John',
+    age: 25
+  }
+})
+
+console.log(state.count) // 0
+state.count++
+console.log(state.user.name) // John
+```
+
+#### 响应式原理
+
+`reactive` 使用 `Proxy` 对对象进行深层代理，所有嵌套属性都是响应式的。
+
+#### 限制
+
+❌ **无法直接替换整个对象**：
+
+```js
+let state = reactive({ count: 0 })
+state = { count: 10 } // ❌ 失去响应性
+
+// ✅ 正确做法：逐个属性更新
+Object.assign(state, { count: 10 })
+```
+
+#### 使用 toRefs 保持响应性
+
+```js
+import { reactive, toRefs } from 'vue'
+
+const state = reactive({
+  count: 0,
+  message: 'Hello'
+})
+
+// ❌ 解构会失去响应性
+const { count, message } = state
+
+// ✅ 使用 toRefs 保持响应性
+const { count, message } = toRefs(state)
+count.value++ // 响应式更新
+```
+
+#### 使用 toRef 转换单个属性
+
+```js
+import { reactive, toRef } from 'vue'
+
+const state = reactive({ count: 0 })
+const countRef = toRef(state, 'count')
+
+countRef.value++ // state.count 也会更新
+```
+
+### 选择建议
+
+- **基本类型**：只能用 `ref`
+- **对象/数组**：推荐 `reactive`，但需要整体替换时用 `ref`
+- **组合式函数返回值**：建议使用 `ref`，便于调用方使用
+
+---
+
+## 六、插槽（Slot）
+
+### 三种插槽类型
+
+#### 1. 默认插槽
+
+```vue
+<!-- 子组件 -->
+<template>
+  <div class="container">
+    <slot>后备内容（没有传入内容时显示）</slot>
+  </div>
+</template>
+
+<!-- 父组件 -->
+<Child>
+  <p>这是传入的内容</p>
+</Child>
+```
+
+#### 2. 具名插槽
+
+使用 `v-slot:name` 或缩写 `#name` 指定插槽名称。
+
+```vue
+<!-- 子组件 -->
+<template>
+  <div class="layout">
+    <header>
+      <slot name="header"></slot>
+    </header>
+    <main>
+      <slot></slot>
+    </main>
+    <footer>
+      <slot name="footer"></slot>
+    </footer>
+  </div>
+</template>
+```
+
+```vue
+<!-- 父组件 -->
+<Child>
+  <template #header>
+    <h1>页面标题</h1>
+  </template>
+  
+  <p>主要内容</p>
+  
+  <template #footer>
+    <p>页脚信息</p>
+  </template>
+</Child>
+```
+
+#### 3. 作用域插槽
+
+子组件通过插槽传递数据给父组件。
+
+```vue
+<!-- 子组件 -->
+<template>
+  <ul>
+    <li v-for="item in items" :key="item.id">
+      <slot :item="item" :index="item.id"></slot>
+    </li>
+  </ul>
+</template>
+
+<script setup>
+const items = [
+  { id: 1, name: 'Apple' },
+  { id: 2, name: 'Banana' }
+]
+</script>
+```
+
+```vue
+<!-- 父组件 -->
+<Child>
+  <template #default="{ item, index }">
+    <span>{{ index }}: {{ item.name }}</span>
+  </template>
+</Child>
+
+<!-- 或简写为 -->
+<Child v-slot="{ item, index }">
+  <span>{{ index }}: {{ item.name }}</span>
+</Child>
+```
+
+### Vue3 插槽变化
+
+- ✅ **统一使用 `v-slot` 语法**（Vue2 的 `slot` 和 `slot-scope` 已废弃）
+- ✅ **支持动态插槽名**
+
+```vue
+<template v-slot:[dynamicSlotName]>
+  动态插槽内容
+</template>
+```
+
+- ✅ **`$slots` API 统一**
+
+```js
+import { useSlots } from 'vue'
+
+const slots = useSlots()
+console.log(slots.default) // 访问默认插槽
+console.log(slots.header) // 访问具名插槽
+```
+
+---
+
+## 七、watch、watchEffect、computed 的区别
+
+| 特性 | computed | watch | watchEffect |
+|------|----------|-------|-------------|
+| **用途** | 派生数据计算 | 监听特定数据变化 | 自动收集依赖并执行 |
+| **缓存** | 有缓存（依赖不变不重新计算） | 无 | 无 |
+| **旧值** | 无法获取 | 可获取 | 无法获取 |
+| **执行时机** | 惰性（被访问时才计算） | 数据变化时触发 | 立即执行 + 依赖变化时触发 |
+| **返回值** | 返回计算结果 | 无返回值 | 返回停止函数 |
+
+### computed 详解
+
+#### 基本用法
+
+```js
+import { ref, computed } from 'vue'
+
+const count = ref(0)
+
+// 只读计算属性
+const double = computed(() => count.value * 2)
+
+console.log(double.value) // 0
+count.value = 5
+console.log(double.value) // 10
+```
+
+#### 可写计算属性
+
+```js
+const firstName = ref('John')
+const lastName = ref('Doe')
+
+const fullName = computed({
+  get() {
+    return `${firstName.value} ${lastName.value}`
+  },
+  set(newValue) {
+    [firstName.value, lastName.value] = newValue.split(' ')
+  }
+})
+
+fullName.value = 'Jane Smith'
+console.log(firstName.value) // Jane
+console.log(lastName.value) // Smith
+```
+
+#### 特点
+
+- ✅ **有缓存**：依赖不变时不会重新计算
+- ✅ **惰性执行**：只有被访问时才计算
+- ✅ **适用场景**：数据派生、格式化、过滤等
+
+### watch 详解
+
+#### 监听单个数据源
+
+```js
+import { ref, watch } from 'vue'
+
+const count = ref(0)
+
+watch(count, (newValue, oldValue) => {
+  console.log(`count 从 ${oldValue} 变为 ${newValue}`)
+})
+
+count.value++ // 输出：count 从 0 变为 1
+```
+
+#### 监听多个数据源
+
+```js
+const firstName = ref('John')
+const lastName = ref('Doe')
+
+watch([firstName, lastName], ([newFirst, newLast], [oldFirst, oldLast]) => {
+  console.log(`名字从 ${oldFirst} ${oldLast} 变为 ${newFirst} ${newLast}`)
+})
+```
+
+#### 监听响应式对象
+
+```js
+const state = reactive({ count: 0, message: 'Hello' })
+
+// 监听整个对象（深度监听）
+watch(state, (newValue, oldValue) => {
+  console.log('state 变化了', newValue)
+})
+
+// 监听对象的某个属性（需要用 getter 函数）
+watch(
+  () => state.count,
+  (newValue, oldValue) => {
+    console.log(`count 从 ${oldValue} 变为 ${newValue}`)
+  }
+)
+```
+
+#### watch 选项
+
+```js
+watch(
+  source,
+  callback,
+  {
+    immediate: true,      // 立即执行一次
+    deep: true,           // 深度监听
+    flush: 'pre'          // 'pre' | 'post' | 'sync'
+  }
+)
+```
+
+- **`immediate`**：创建侦听器时立即执行回调
+- **`deep`**：深度遍历对象的所有嵌套属性
+- **`flush`**：控制回调的执行时机
+  - `pre`（默认）：在组件更新前调用
+  - `post`：在组件更新后调用
+  - `sync`：同步调用（谨慎使用）
+
+#### 停止监听
+
+```js
+const stopWatch = watch(count, (newValue) => {
+  console.log(newValue)
+})
+
+// 手动停止监听
+stopWatch()
+```
+
+### watchEffect 详解
+
+#### 基本用法
+
+`watchEffect` 会**立即执行**回调，并自动追踪依赖。
+
+```js
+import { ref, watchEffect } from 'vue'
+
+const count = ref(0)
+const message = ref('Hello')
+
+watchEffect(() => {
+  // 自动追踪 count 和 message
+  console.log(`count: ${count.value}, message: ${message.value}`)
+})
+// 立即输出：count: 0, message: Hello
+
+count.value++ // 输出：count: 1, message: Hello
+message.value = 'Hi' // 输出：count: 1, message: Hi
+```
+
+#### 停止监听
+
+```js
+const stop = watchEffect(() => {
+  console.log(count.value)
+})
+
+// 停止监听
+stop()
+```
+
+#### 清理副作用
+
+```js
+watchEffect((onCleanup) => {
+  const timer = setTimeout(() => {
+    console.log('定时器执行')
+  }, 1000)
+  
+  // 在副作用重新执行前或停止时清理
+  onCleanup(() => {
+    clearTimeout(timer)
+  })
+})
+```
+
+- **`computed`**：用于数据计算和派生，有缓存，性能更好
+- **`watch`**：用于精确监听特定数据，需要访问旧值时使用
+- **`watchEffect`**：用于自动依赖跟踪，不需要旧值，代码更简洁
+
+```js
+// ✅ 使用 computed：派生数据
+const fullName = computed(() => `${firstName.value} ${lastName.value}`)
+
+// ✅ 使用 watch：需要旧值或精确控制监听源
+watch(userId, async (newId, oldId) => {
+  console.log(`用户从 ${oldId} 切换到 ${newId}`)
+  await fetchUserData(newId)
+})
+
+// ✅ 使用 watchEffect：自动依赖收集
+watchEffect(async () => {
+  // 自动追踪 userId
+  const data = await fetchUserData(userId.value)
+  userData.value = data
+})
+```
+
+---
+
+## 总结
+
+本文梳理了 Vue3 面试的核心知识点：
+
+1. **生命周期**：组合式 API 的 `setup()` 和钩子重命名
+2. **组件通信**：8 种通信方式及其适用场景
+3. **修饰符**：事件、v-model、键盘修饰符及 Vue3 变化
+4. **指令**：内置指令和自定义指令生命周期
+5. **响应式 API**：`ref` vs `reactive` 的区别与选择
+6. **插槽**：默认、具名、作用域插槽的使用
+7. **侦听器**：`computed`、`watch`、`watchEffect` 的对比
+
+掌握这些知识点，能够应对大部分 Vue3 相关的面试问题。
+
+---
+
+**参考来源**：[2025前端面试题-Vue3基础篇](https://juejin.cn/post/7503111373468893193)
+

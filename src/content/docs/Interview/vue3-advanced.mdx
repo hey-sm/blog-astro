@@ -1,0 +1,1114 @@
+---
+title: Vue3 进阶面试题
+description: Vue3 进阶知识点梳理，涵盖 keep-alive、异步组件、路由、状态管理、性能优化等
+---
+
+# Vue3 进阶面试题
+
+本文梳理了 Vue3 进阶面试核心知识点，涵盖组件缓存、异步加载、路由管理、状态管理、性能优化、SSR 等主题。
+
+---
+
+## 一、keep-alive
+
+### 核心作用
+
+`<keep-alive>` 是 Vue 的内置组件，用于**缓存组件实例**，避免重复销毁和创建。
+
+#### 适用场景
+
+- **Tab 页切换**：保留用户在不同 Tab 的浏览状态
+- **表单填写**：切换页面后保留已填写的内容
+- **列表滚动位置**：返回列表时保持之前的滚动位置
+
+### 基本用法
+
+```vue
+<template>
+  <keep-alive>
+    <component :is="currentComponent"></component>
+  </keep-alive>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import ComponentA from './ComponentA.vue'
+import ComponentB from './ComponentB.vue'
+
+const currentComponent = ref(ComponentA)
+</script>
+```
+
+### 配置属性
+
+#### include / exclude
+
+指定哪些组件需要缓存或不缓存。
+
+```vue
+<!-- 只缓存 name 为 ComponentA 的组件 -->
+<keep-alive include="ComponentA">
+  <component :is="currentComponent"></component>
+</keep-alive>
+
+<!-- 缓存多个组件（逗号分隔） -->
+<keep-alive include="ComponentA,ComponentB">
+  <component :is="currentComponent"></component>
+</keep-alive>
+
+<!-- 使用正则表达式 -->
+<keep-alive :include="/Component[AB]/">
+  <component :is="currentComponent"></component>
+</keep-alive>
+
+<!-- 排除特定组件 -->
+<keep-alive exclude="ComponentC">
+  <component :is="currentComponent"></component>
+</keep-alive>
+```
+
+⚠️ **注意**：`include` 和 `exclude` 匹配的是组件的 `name` 选项，而不是文件名。
+
+#### max
+
+限制最大缓存组件数量，超出时使用 **LRU（Least Recently Used）策略**淘汰最久未使用的组件。
+
+```vue
+<keep-alive :max="3">
+  <component :is="currentComponent"></component>
+</keep-alive>
+```
+
+### 生命周期钩子
+
+被 `<keep-alive>` 缓存的组件会新增两个生命周期钩子：
+
+- **`onActivated`**：组件被激活（从缓存中恢复）时调用
+- **`onDeactivated`**：组件被停用（放入缓存）时调用
+
+```vue
+<script setup>
+import { onActivated, onDeactivated, onMounted, onUnmounted } from 'vue'
+
+onMounted(() => {
+  console.log('组件挂载')
+})
+
+onActivated(() => {
+  console.log('组件激活（从缓存中恢复）')
+  // 可在此刷新数据
+})
+
+onDeactivated(() => {
+  console.log('组件停用（放入缓存）')
+})
+
+onUnmounted(() => {
+  console.log('组件卸载（从缓存中移除）')
+})
+</script>
+```
+
+### 结合路由使用
+
+```vue
+<template>
+  <router-view v-slot="{ Component }">
+    <keep-alive :include="['Home', 'About']">
+      <component :is="Component" />
+    </keep-alive>
+  </router-view>
+</template>
+```
+
+1. **缓存机制**：使用 `Map` 数据结构缓存 VNode 实例
+2. **DOM 操作**：组件被缓存时，DOM 会从文档流中 **detached**（分离），激活时重新 **attached**（附加）
+3. **LRU 策略**：当缓存数量超过 `max` 时，删除最久未使用的组件
+
+---
+
+## 二、异步组件
+
+### 定义异步组件
+
+Vue3 使用 `defineAsyncComponent` 函数定义异步组件。
+
+```js
+import { defineAsyncComponent } from 'vue'
+
+// 基本用法
+const AsyncComponent = defineAsyncComponent(() => 
+  import('./components/MyComponent.vue')
+)
+```
+
+### 配置选项
+
+```js
+const AsyncComponent = defineAsyncComponent({
+  // 加载函数
+  loader: () => import('./components/Heavy.vue'),
+  
+  // 加载中显示的组件
+  loadingComponent: LoadingSpinner,
+  
+  // 加载失败显示的组件
+  errorComponent: ErrorComponent,
+  
+  // 展示加载组件前的延迟时间（默认 200ms）
+  delay: 200,
+  
+  // 超时时间（超时则显示错误组件）
+  timeout: 3000
+})
+```
+
+### 在组件中使用
+
+```vue
+<template>
+  <AsyncComponent />
+</template>
+
+<script setup>
+import { defineAsyncComponent } from 'vue'
+
+const AsyncComponent = defineAsyncComponent(() => 
+  import('./components/MyComponent.vue')
+)
+</script>
+```
+
+### Suspense 组件
+
+`<Suspense>` 是 Vue3 的实验性特性，用于统一管理异步组件的加载状态。
+
+```vue
+<template>
+  <Suspense>
+    <!-- 默认插槽：异步内容 -->
+    <template #default>
+      <AsyncComponent />
+    </template>
+    
+    <!-- 后备插槽：加载中显示的内容 -->
+    <template #fallback>
+      <LoadingSpinner />
+    </template>
+  </Suspense>
+</template>
+```
+
+1. **路由懒加载**：减少初始包体积
+
+```js
+const routes = [
+  {
+    path: '/about',
+    component: () => import('./views/About.vue')
+  }
+]
+```
+
+2. **条件渲染组件**：只在需要时加载
+
+```vue
+<template>
+  <button @click="showModal = true">打开弹窗</button>
+  <AsyncModal v-if="showModal" />
+</template>
+```
+
+3. **大型模块按需加载**：如富文本编辑器、图表库等
+
+---
+
+## 三、Vue Router
+
+### Vue Router 4.x 核心变化
+
+#### 1. 创建路由实例
+
+Vue Router 4.x 使用 `createRouter` 函数。
+
+```js
+import { createRouter, createWebHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      path: '/',
+      name: 'Home',
+      component: () => import('./views/Home.vue')
+    },
+    {
+      path: '/about',
+      name: 'About',
+      component: () => import('./views/About.vue')
+    }
+  ]
+})
+
+export default router
+```
+
+#### 2. 组合式 API
+
+使用 `useRouter` 和 `useRoute` 替代 `this.$router` 和 `this.$route`。
+
+```vue
+<script setup>
+import { useRouter, useRoute } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
+
+// 编程式导航
+const goToAbout = () => {
+  router.push('/about')
+}
+
+// 访问路由参数
+console.log(route.params.id)
+console.log(route.query.page)
+</script>
+```
+
+### 路由模式
+
+#### History 模式
+
+使用 HTML5 History API，URL 更美观但需要服务器配置。
+
+```js
+import { createRouter, createWebHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHistory(), // URL: /about
+  routes: [...]
+})
+```
+
+#### Hash 模式
+
+使用 URL 的 hash（#），无需服务器配置。
+
+```js
+import { createRouter, createWebHashHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHashHistory(), // URL: /#/about
+  routes: [...]
+})
+```
+
+### 导航守卫
+
+#### 全局守卫
+
+```js
+// 全局前置守卫
+router.beforeEach((to, from, next) => {
+  if (to.meta.requiresAuth && !isAuthenticated()) {
+    next('/login')
+  } else {
+    next()
+  }
+})
+
+// 全局解析守卫
+router.beforeResolve((to, from, next) => {
+  // 在导航被确认前调用
+  next()
+})
+
+// 全局后置钩子
+router.afterEach((to, from) => {
+  // 导航完成后调用（无 next 参数）
+  document.title = to.meta.title || 'App'
+})
+```
+
+#### 路由独享守卫
+
+```js
+const routes = [
+  {
+    path: '/admin',
+    component: Admin,
+    beforeEnter: (to, from, next) => {
+      if (isAdmin()) {
+        next()
+      } else {
+        next('/forbidden')
+      }
+    }
+  }
+]
+```
+
+### 动态路由
+
+#### 参数匹配
+
+```js
+const routes = [
+  {
+    path: '/user/:id',
+    component: User
+  }
+]
+
+// 访问参数
+const route = useRoute()
+console.log(route.params.id) // 123
+```
+
+#### 动态添加路由
+
+```js
+// 添加路由
+router.addRoute({
+  path: '/new-page',
+  component: NewPage
+})
+
+// 添加嵌套路由
+router.addRoute('parentName', {
+  path: 'child',
+  component: Child
+})
+
+// 删除路由
+router.removeRoute('routeName')
+```
+
+### 路由元信息
+
+```js
+const routes = [
+  {
+    path: '/admin',
+    component: Admin,
+    meta: {
+      requiresAuth: true,
+      title: '管理后台'
+    }
+  }
+]
+
+// 在守卫中使用
+router.beforeEach((to, from) => {
+  if (to.meta.requiresAuth && !isLoggedIn()) {
+    return '/login'
+  }
+})
+```
+
+---
+
+## 四、状态管理
+
+### Vuex 核心概念
+
+#### State
+
+集中存储应用状态。
+
+```js
+const store = createStore({
+  state: {
+    count: 0,
+    user: null
+  }
+})
+
+// 访问 state
+console.log(store.state.count)
+```
+
+#### Getter
+
+派生状态，类似于计算属性。
+
+```js
+const store = createStore({
+  state: {
+    todos: [
+      { id: 1, text: 'Learn Vue', done: true },
+      { id: 2, text: 'Build App', done: false }
+    ]
+  },
+  getters: {
+    doneTodos: (state) => {
+      return state.todos.filter(todo => todo.done)
+    },
+    doneTodosCount: (state, getters) => {
+      return getters.doneTodos.length
+    }
+  }
+})
+
+// 访问 getter
+console.log(store.getters.doneTodosCount)
+```
+
+#### Mutation
+
+同步修改 state 的唯一方式。
+
+```js
+const store = createStore({
+  state: {
+    count: 0
+  },
+  mutations: {
+    increment(state) {
+      state.count++
+    },
+    incrementBy(state, payload) {
+      state.count += payload
+    }
+  }
+})
+
+// 提交 mutation
+store.commit('increment')
+store.commit('incrementBy', 10)
+```
+
+#### Action
+
+处理异步操作，通过提交 mutation 修改状态。
+
+```js
+const store = createStore({
+  state: {
+    user: null
+  },
+  mutations: {
+    setUser(state, user) {
+      state.user = user
+    }
+  },
+  actions: {
+    async fetchUser({ commit }, userId) {
+      const user = await api.getUser(userId)
+      commit('setUser', user)
+    }
+  }
+})
+
+// 分发 action
+store.dispatch('fetchUser', 123)
+```
+
+#### Module
+
+模块化管理大型应用的状态。
+
+```js
+const moduleA = {
+  namespaced: true,
+  state: { count: 0 },
+  mutations: {
+    increment(state) {
+      state.count++
+    }
+  },
+  actions: {
+    incrementAsync({ commit }) {
+      setTimeout(() => {
+        commit('increment')
+      }, 1000)
+    }
+  }
+}
+
+const store = createStore({
+  modules: {
+    a: moduleA
+  }
+})
+
+// 访问模块
+store.state.a.count
+store.commit('a/increment')
+store.dispatch('a/incrementAsync')
+```
+
+### Pinia（Vue3 推荐）
+
+#### Pinia 优势
+
+- ✅ **无 Mutations**：直接通过 Actions 修改状态
+- ✅ **扁平化结构**：无嵌套模块，简化代码
+- ✅ **TypeScript 友好**：完整的类型推断
+- ✅ **支持多种语法**：Options Store 和 Setup Store
+
+#### 定义 Store（Options Store）
+
+```js
+import { defineStore } from 'pinia'
+
+export const useUserStore = defineStore('user', {
+  state: () => ({
+    name: 'John',
+    age: 25
+  }),
+  getters: {
+    doubleAge: (state) => state.age * 2
+  },
+  actions: {
+    async fetchUser(id) {
+      const user = await api.getUser(id)
+      this.name = user.name
+      this.age = user.age
+    }
+  }
+})
+```
+
+#### 定义 Store（Setup Store）
+
+```js
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+
+export const useUserStore = defineStore('user', () => {
+  const name = ref('John')
+  const age = ref(25)
+  const doubleAge = computed(() => age.value * 2)
+  
+  async function fetchUser(id) {
+    const user = await api.getUser(id)
+    name.value = user.name
+    age.value = user.age
+  }
+  
+  return { name, age, doubleAge, fetchUser }
+})
+```
+
+#### 在组件中使用
+
+```vue
+<script setup>
+import { useUserStore } from '@/stores/user'
+import { storeToRefs } from 'pinia'
+
+const userStore = useUserStore()
+
+// 解构保持响应性
+const { name, age, doubleAge } = storeToRefs(userStore)
+
+// 直接修改 state
+userStore.name = 'Jane'
+
+// 批量修改
+userStore.$patch({
+  name: 'Jane',
+  age: 30
+})
+
+// 调用 action
+userStore.fetchUser(123)
+</script>
+```
+
+---
+
+## 五、性能优化
+
+### 响应式优化
+
+#### Proxy 替代 Object.defineProperty
+
+Vue3 使用 Proxy 实现响应式，性能更优。
+
+**优势**：
+- ✅ 可以监听数组索引和长度变化
+- ✅ 可以监听对象属性的新增和删除
+- ✅ 支持 Map、Set、WeakMap、WeakSet
+
+#### 惰性依赖追踪
+
+只追踪实际访问的属性，减少开销。
+
+### 编译优化
+
+#### 静态提升（Static Hoisting）
+
+将静态节点提升到渲染函数外部，避免重复创建。
+
+```js
+// 优化前
+function render() {
+  return h('div', [
+    h('p', 'Static Text'),
+    h('p', dynamicText)
+  ])
+}
+
+// 优化后
+const hoisted = h('p', 'Static Text')
+function render() {
+  return h('div', [
+    hoisted,
+    h('p', dynamicText)
+  ])
+}
+```
+
+#### Patch Flag
+
+标记动态节点类型，精准更新。
+
+```js
+// 文本节点
+<div>{{ text }}</div>  // PatchFlag.TEXT
+
+// 属性
+<div :class="cls"></div>  // PatchFlag.CLASS
+
+// 样式
+<div :style="style"></div>  // PatchFlag.STYLE
+```
+
+#### Block Tree
+
+将动态节点收集到一个数组中，跳过静态节点比对。
+
+### 组件优化
+
+#### v-memo
+
+缓存子树，只在依赖变化时重新渲染。
+
+```vue
+<div v-memo="[value1, value2]">
+  <!-- 只有 value1 或 value2 变化时才重新渲染 -->
+</div>
+```
+
+#### shallowRef / shallowReactive
+
+只对第一层属性进行响应式处理。
+
+```js
+import { shallowRef } from 'vue'
+
+const state = shallowRef({
+  nested: { count: 0 }
+})
+
+// 不会触发更新
+state.value.nested.count++
+
+// 会触发更新
+state.value = { nested: { count: 1 } }
+```
+
+#### 异步组件与代码分割
+
+```js
+const HeavyComponent = defineAsyncComponent(() =>
+  import('./components/Heavy.vue')
+)
+```
+
+### 资源优化
+
+#### 路由懒加载
+
+```js
+const routes = [
+  {
+    path: '/about',
+    component: () => import('./views/About.vue')
+  }
+]
+```
+
+#### Tree Shaking
+
+移除未使用的代码，减少打包体积。
+
+```js
+// 按需导入
+import { ref, computed } from 'vue'
+
+// ❌ 不要全量导入
+import Vue from 'vue'
+```
+
+#### 虚拟滚动
+
+处理大量列表数据时，只渲染可见区域。
+
+```vue
+<template>
+  <virtual-scroller
+    :items="items"
+    :item-height="50"
+  >
+    <template #default="{ item }">
+      <div>{{ item.name }}</div>
+    </template>
+  </virtual-scroller>
+</template>
+```
+
+---
+
+## 六、Vue2 与 Vue3 的区别
+
+### 响应式系统
+
+| 特性 | Vue2 | Vue3 |
+|------|------|------|
+| **实现方式** | Object.defineProperty | Proxy |
+| **监听数组** | 需重写数组方法 | 原生支持 |
+| **新增属性** | 需要 `$set` | 自动响应 |
+| **删除属性** | 需要 `$delete` | 自动响应 |
+| **性能** | 初始化时递归遍历 | 惰性代理 |
+
+### API 设计
+
+#### Vue2（Options API）
+
+```js
+export default {
+  data() {
+    return { count: 0 }
+  },
+  computed: {
+    double() {
+      return this.count * 2
+    }
+  },
+  methods: {
+    increment() {
+      this.count++
+    }
+  }
+}
+```
+
+#### Vue3（Composition API）
+
+```js
+import { ref, computed } from 'vue'
+
+export default {
+  setup() {
+    const count = ref(0)
+    const double = computed(() => count.value * 2)
+    const increment = () => count.value++
+    
+    return { count, double, increment }
+  }
+}
+```
+
+### 性能提升
+
+- ✅ **编译优化**：静态提升、Patch Flag、Block Tree
+- ✅ **打包体积**：减少 41%（13.5kb → 10kb）
+- ✅ **内存占用**：减少 54%
+- ✅ **初始渲染**：快 55%
+- ✅ **更新速度**：快 133%
+
+### 新特性
+
+#### Fragment
+
+支持多个根节点。
+
+```vue
+<!-- Vue3 -->
+<template>
+  <header>Header</header>
+  <main>Content</main>
+  <footer>Footer</footer>
+</template>
+```
+
+#### Teleport
+
+将组件渲染到 DOM 的其他位置。
+
+```vue
+<Teleport to="body">
+  <div class="modal">Modal Content</div>
+</Teleport>
+```
+
+#### Suspense
+
+处理异步依赖。
+
+```vue
+<Suspense>
+  <template #default>
+    <AsyncComponent />
+  </template>
+  <template #fallback>
+    <LoadingSpinner />
+  </template>
+</Suspense>
+```
+
+---
+
+## 七、SPA（单页面应用）
+
+### 核心特点
+
+- ✅ **无刷新跳转**：通过前端路由实现页面切换
+- ✅ **前后端分离**：前端独立开发和部署
+- ✅ **用户体验好**：切换流畅，无白屏
+- ❌ **首屏加载慢**：需要加载完整的 JS 包
+- ❌ **SEO 不友好**：爬虫难以抓取动态内容
+
+### 首屏优化方案
+
+#### 路由懒加载
+
+```js
+const routes = [
+  {
+    path: '/about',
+    component: () => import('./views/About.vue')
+  }
+]
+```
+
+#### 资源预加载
+
+```vue
+<!-- 预加载关键资源 -->
+<link rel="preload" href="/critical.js" as="script">
+
+<!-- 预连接外部域名 -->
+<link rel="preconnect" href="https://api.example.com">
+
+<!-- 预获取未来可能用到的资源 -->
+<link rel="prefetch" href="/future.js">
+```
+
+#### 骨架屏
+
+```vue
+<template>
+  <div v-if="loading" class="skeleton">
+    <div class="skeleton-avatar"></div>
+    <div class="skeleton-text"></div>
+  </div>
+  <div v-else>
+    <!-- 实际内容 -->
+  </div>
+</template>
+```
+
+### SEO 解决方案
+
+#### 1. 预渲染（Prerendering）
+
+在构建时生成静态 HTML。
+
+```js
+// vite.config.js
+import { VitePluginPrerenderRoutes } from 'vite-plugin-prerender-routes'
+
+export default {
+  plugins: [
+    VitePluginPrerenderRoutes({
+      routes: ['/', '/about', '/contact']
+    })
+  ]
+}
+```
+
+#### 2. 服务端渲染（SSR）
+
+服务器生成完整 HTML。
+
+```js
+// server.js
+import { createSSRApp } from 'vue'
+import { renderToString } from 'vue/server-renderer'
+
+const app = createSSRApp({
+  template: '<div>{{ message }}</div>',
+  data() {
+    return { message: 'Hello SSR' }
+  }
+})
+
+const html = await renderToString(app)
+```
+
+#### 3. 静态站点生成（SSG）
+
+构建时预渲染所有页面，适合内容不频繁变化的网站。
+
+---
+
+## 八、SSR（服务端渲染）
+
+### 工作原理
+
+1. **服务器端**：Vue 组件渲染为 HTML 字符串
+2. **返回 HTML**：包含完整内容的 HTML 发送给浏览器
+3. **客户端激活（Hydration）**：Vue 接管静态 HTML，绑定事件和响应式
+
+### SSR 优势
+
+- ✅ **SEO 友好**：爬虫可直接抓取完整内容
+- ✅ **首屏快**：用户立即看到内容
+- ✅ **更好的性能指标**：FCP、LCP 更优
+
+### SSR 劣势
+
+- ❌ **服务器负载高**：每次请求都要渲染
+- ❌ **开发复杂度**：需要考虑服务端/客户端差异
+- ❌ **部署成本高**：需要 Node.js 服务器
+
+### Nuxt.js 3
+
+#### 创建项目
+
+```bash
+npx nuxi init my-app
+cd my-app
+npm install
+npm run dev
+```
+
+#### 页面路由
+
+Nuxt 自动根据 `pages/` 目录生成路由。
+
+```
+pages/
+  index.vue       → /
+  about.vue       → /about
+  user/
+    [id].vue      → /user/:id
+```
+
+#### 数据预取
+
+```vue
+<script setup>
+// 服务端和客户端都会执行
+const { data: user } = await useFetch('/api/user/123')
+
+// 只在服务端执行
+const { data: posts } = await useAsyncData('posts', () => 
+  $fetch('/api/posts')
+)
+</script>
+
+<template>
+  <div>
+    <h1>{{ user.name }}</h1>
+    <div v-for="post in posts" :key="post.id">
+      {{ post.title }}
+    </div>
+  </div>
+</template>
+```
+
+#### 服务端专用钩子
+
+```vue
+<script setup>
+import { onServerPrefetch } from 'vue'
+
+// 只在服务端执行
+onServerPrefetch(async () => {
+  const data = await fetchData()
+  // 预取数据
+})
+</script>
+```
+
+#### 混合渲染
+
+Nuxt 3 支持多种渲染模式。
+
+```js
+// nuxt.config.ts
+export default defineNuxtConfig({
+  routeRules: {
+    // 静态生成
+    '/': { prerender: true },
+    
+    // 服务端渲染
+    '/admin/**': { ssr: true },
+    
+    // 客户端渲染
+    '/dashboard/**': { ssr: false },
+    
+    // 增量静态生成（ISR）
+    '/blog/**': { swr: 3600 } // 1小时缓存
+  }
+})
+```
+
+### SSR 性能优化
+
+#### 组件缓存
+
+```js
+// server.js
+import { createRenderer } from 'vue/server-renderer'
+import LRU from 'lru-cache'
+
+const cache = new LRU({
+  max: 1000,
+  ttl: 1000 * 60 * 15 // 15分钟
+})
+
+const renderer = createRenderer({
+  cache
+})
+```
+
+#### 流式渲染
+
+```js
+import { renderToNodeStream } from 'vue/server-renderer'
+
+const stream = renderToNodeStream(app)
+stream.pipe(res)
+```
+
+#### 边缘渲染
+
+使用 CDN 边缘节点进行 SSR，降低延迟。
+
+---
+
+## 总结
+
+本文梳理了 Vue3 进阶面试的核心知识点：
+
+1. **keep-alive**：组件缓存机制和生命周期
+2. **异步组件**：懒加载和 Suspense
+3. **Vue Router**：路由模式、导航守卫、动态路由
+4. **状态管理**：Vuex 和 Pinia 的使用
+5. **性能优化**：响应式、编译、组件、资源优化
+6. **Vue2 vs Vue3**：响应式系统、API 设计、新特性
+7. **SPA**：特点、优化方案、SEO 解决方案
+8. **SSR**：工作原理、Nuxt.js 3、性能优化
+
+掌握这些知识点，能够应对 Vue3 进阶相关的面试问题。
+
+---
+
+**参考来源**：[2025前端面试题-Vue3进阶篇](https://juejin.cn/post/7511568225987051555)
+

@@ -1,7 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import rehypeMermaid from 'rehype-mermaid';
 import vercel from '@astrojs/vercel';
 
 // https://astro.build/config
@@ -22,6 +21,7 @@ export default defineConfig({
 				'./src/styles/custom.css',
 			],
 			components: {
+				Head: './src/components/Head.astro',
 				Header: './src/components/Header.astro',
 				Sidebar: './src/components/Sidebar.astro',
 			},
@@ -78,10 +78,7 @@ export default defineConfig({
 			],
 		}),
 	],
-	markdown: {
-		rehypePlugins: [rehypeMermaid],
-	},
-	  devToolbar: {
-    enabled: false
-  }
+	devToolbar: {
+		enabled: false
+	}
 });

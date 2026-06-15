@@ -1,0 +1,37 @@
+---
+import mermaid from 'mermaid';
+
+// 初始化 Mermaid
+if (typeof window !== 'undefined') {
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default'
+  });
+}
+---
+
+<script>
+  import mermaid from 'mermaid';
+
+  // 页面加载后渲染所有 mermaid 代码块
+  document.addEventListener('DOMContentLoaded', () => {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'default'
+    });
+
+    // 监听主题变化
+    const observer = new MutationObserver(() => {
+      const isDark = document.documentElement.dataset.theme === 'dark';
+      mermaid.initialize({
+        theme: isDark ? 'dark' : 'default'
+      });
+      mermaid.run();
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+  });
+</script>

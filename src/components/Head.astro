@@ -1,0 +1,49 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import StarlightHead from '@astrojs/starlight/components/Head.astro';
+---
+
+<StarlightHead {...Astro.props}><slot /></StarlightHead>
+
+<script>
+  import mermaid from 'mermaid';
+
+  // 初始化 Mermaid
+  const initMermaid = () => {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: isDark ? 'dark' : 'default'
+    });
+
+    // 将所有 language-mermaid 的 pre code 转换为 mermaid 格式
+    document.querySelectorAll('pre[data-language="mermaid"]').forEach((el) => {
+      const code = el.querySelector('code');
+      if (code) {
+        const mermaidDiv = document.createElement('div');
+        mermaidDiv.className = 'mermaid';
+        mermaidDiv.textContent = code.textContent || '';
+        el.replaceWith(mermaidDiv);
+      }
+    });
+
+    mermaid.run();
+  };
+
+  // 页面加载时初始化
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMermaid);
+  } else {
+    initMermaid();
+  }
+
+  // 监听主题变化
+  const observer = new MutationObserver(() => {
+    initMermaid();
+  });
+
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  });
+</script>

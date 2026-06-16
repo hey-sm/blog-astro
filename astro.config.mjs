@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import vercel from '@astrojs/vercel';
+import tailwindcss from '@tailwindcss/vite';
 
 // https://astro.build/config
 export default defineConfig({
@@ -12,18 +13,19 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'fluxp',
+			logo: {
+				src: './public/favicon.svg',
+			},
 			description: '中文前端技术知识库',
 			defaultLocale: 'root',
 			locales: {
 				root: { label: '简体中文', lang: 'zh-CN' }
 			},
 			customCss: [
+				'./src/styles/tailwind.css',
 				'./src/styles/custom.css',
 			],
 			components: {
-				Head: './src/components/Head.astro',
-				Header: './src/components/Header.astro',
-				Sidebar: './src/components/Sidebar.astro',
 			},
 			expressiveCode: {
 				themes: ['github-dark', 'github-light']
@@ -78,6 +80,9 @@ export default defineConfig({
 			],
 		}),
 	],
+	vite: {
+		plugins: [tailwindcss()],
+	},
 	devToolbar: {
 		enabled: false
 	}

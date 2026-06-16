@@ -2,34 +2,74 @@
 title: Flutter 知识体系导读
 ---
 
+import Markmap from '@components/Markmap.astro';
+
+
 # Flutter 知识体系导读
 
-```mermaid
-mindmap
-  root((Flutter 知识体系))
-    入门认知
-      技术定位
-      学习前置
-      最小示例
-    核心能力
-      基础语法
-      核心机制
-      常用 API
-    项目实践
-      工程结构
-      数据流
-      调试测试
-    进阶专题
-      性能优化
-      架构模式
-      生态工具
-```
+<Markmap markdown={`
+# Flutter 知识体系
+- 基础入门
+  - Flutter 简介
+    - Dart 语言
+    - Widget 树
+    - 跨平台原理
+  - 开发环境
+    - Flutter SDK
+    - Android Studio
+    - VS Code
+  - 项目结构
+    - lib 目录
+    - pubspec.yaml
+    - 资源管理
+- Widget 系统
+  - 基础 Widget
+    - StatelessWidget
+    - StatefulWidget
+    - Container
+    - Text / Image
+  - 布局 Widget
+    - Row / Column
+    - Stack
+    - Flex
+    - Padding / Center
+  - 交互 Widget
+    - Button
+    - TextField
+    - GestureDetector
+- 状态管理
+  - setState
+  - InheritedWidget
+  - Provider
+  - Riverpod
+  - Bloc
+- 进阶开发
+  - 导航与路由
+    - Navigator
+    - 命名路由
+    - 路由传参
+  - 网络请求
+    - http 包
+    - dio
+    - JSON 解析
+  - 本地存储
+    - shared_preferences
+    - sqflite
+    - hive
+  - 动画
+    - Animation
+    - AnimationController
+    - Hero 动画
+- 工程实践
+  - 性能优化
+  - 测试
+    - 单元测试
+    - Widget 测试
+    - 集成测试
+  - CI/CD
+  - 发布上架
+`} />
 
-本系列文档以 [roadmap.sh Flutter 路线图](https://roadmap.sh/flutter) 为骨架展开，**Flutter 3.x + Dart 3.x 为基线**，覆盖从语言层、Widget 体系、渲染内核到工程化与跨平台分发的完整路径。
-
-阅读对象：**没有 Flutter / Dart 经验，但具备至少一门面向对象语言基础（Java、C#、TypeScript、Kotlin、Swift 任意）**。每个新概念会从"它是什么、为什么需要它、最小可运行示例、常见陷阱"四个角度展开，不假设读者已经接触过任何相关库或框架。
-
-Dart 3 的新语法（`records`、`patterns`、`sealed`、class modifiers）与 Flutter 3 的新内核（Impeller）会在出现处显式标注版本。
 
 ## 章节结构
 
@@ -91,3 +131,4 @@ Dart 3 的新语法（`records`、`patterns`、`sealed`、class modifiers）与 
 ## 起点
 
 请从 [简介与心智模型](/flutter/introduction) 开始。
+

@@ -2,32 +2,71 @@
 title: TypeScript 知识体系导读
 ---
 
+import Markmap from '@components/Markmap.astro';
+
+
 # TypeScript 知识体系导读
 
-```mermaid
-mindmap
-  root((TypeScript 知识体系))
-    入门认知
-      技术定位
-      学习前置
-      最小示例
-    核心能力
-      基础语法
-      核心机制
-      常用 API
-    项目实践
-      工程结构
-      数据流
-      调试测试
-    进阶专题
-      性能优化
-      架构模式
-      生态工具
-```
+<Markmap markdown={`
+# TypeScript 知识体系
+- 基础概念
+  - TypeScript 简介
+    - 类型系统
+    - 编译器
+    - 配置文件
+  - 基础类型
+    - 原始类型
+    - 数组与元组
+    - 枚举
+    - Any / Unknown
+    - Void / Never
+  - 类型注解
+    - 变量注解
+    - 函数注解
+    - 对象注解
+- 高级类型
+  - 接口与类型别名
+    - Interface
+    - Type Alias
+    - 交叉类型
+    - 联合类型
+  - 泛型
+    - 泛型函数
+    - 泛型接口
+    - 泛型约束
+  - 类型操作
+    - keyof
+    - typeof
+    - 索引访问类型
+    - 条件类型
+  - 工具类型
+    - Partial / Required
+    - Pick / Omit
+    - Record / Exclude
+- 面向对象
+  - 类
+    - 构造函数
+    - 访问修饰符
+    - 继承
+    - 抽象类
+  - 接口实现
+  - 装饰器
+- 高级特性
+  - 类型守卫
+    - typeof
+    - instanceof
+    - in
+    - 自定义类型守卫
+  - 模块系统
+    - ES Modules
+    - 命名空间
+    - 声明文件
+  - 配置与工具
+    - tsconfig.json
+    - 编译选项
+    - 类型声明
+`} />
 
-本系列文档以 [roadmap.sh TypeScript 路线图](https://roadmap.sh/typescript) 为骨架展开，**TypeScript 5.x 为示例基线**，结合 **React 18+** 实战应用，覆盖从基础类型到高级类型系统的完整路径。
-
-阅读对象为已具备 [JavaScript 核心知识](/js) 和 [React 基础](/react) 的前端工程师。每章配有可运行的代码片段、类型推断演示与 React 实际应用。
 
 ## 章节结构
 
@@ -137,3 +176,4 @@ mindmap
 ## 起点
 
 请从 [简介与优势](/ts/introduction) 开始。
+

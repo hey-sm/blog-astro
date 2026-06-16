@@ -3,6 +3,8 @@ title: 渲染机制
 description: Reconciler、Lists 与 Key、Refs、合成事件、HOC 与 Render Props
 ---
 
+import Markmap from '@components/Markmap.astro';
+
 # 渲染机制
 
 理解 React 的渲染机制，是写出正确且高性能组件的前提。本章自顶向下覆盖：**渲染流程**、**列表与 Key**、**Refs**、**合成事件**、**高阶组件（HOC）**、**Render Props**。
@@ -11,13 +13,18 @@ description: Reconciler、Lists 与 Key、Refs、合成事件、HOC 与 Render P
 
 每一次 render 都经历两个阶段：
 
-```mermaid
-flowchart TD
-    R0(["Render Phase · 纯函数，可中断"]) --> R1["调用组件函数<br/>→ 生成新的 React Element 树"] --> R2["与上一次 Fiber 树 diff<br/>标记需要变更的节点"]
-    R2 -.->|"被高优先级更新打断：暂停 / 丢弃重来"| R0
-    R2 ==>|"diff 完成 → 提交变更"| C0(["Commit Phase · 同步执行，不可中断"])
-    C0 --> C1["将变更应用到真实 DOM"] --> C2["运行 useLayoutEffect<br/>（同步，Paint 前）"] --> C3["浏览器 Paint 绘制"] --> C4["运行 useEffect<br/>（异步，Paint 后）"]
-```
+<Markmap markdown={`
+# React 渲染两阶段
+- Render Phase · 纯函数，可中断
+  - 调用组件函数 → 生成新的 React Element 树
+  - 与上一次 Fiber 树 diff，标记需要变更的节点
+  - 被高优先级更新打断 → 暂停 / 丢弃重来（回到 Render Phase）
+- Commit Phase · 同步执行，不可中断（diff 完成后提交）
+  - 将变更应用到真实 DOM
+  - 运行 useLayoutEffect（同步，Paint 前）
+  - 浏览器 Paint 绘制
+  - 运行 useEffect（异步，Paint 后）
+`} />
 
 #### 触发渲染的方式
 
@@ -452,3 +459,4 @@ Element 是不可变快照；Fiber 是可变运行时结构。React 用 element 
 - 合成事件是跨浏览器的统一抽象，事件被委托到 `createRoot` 容器；
 - HOC 与 render props 多数被 Hook 取代，仅在无 Hook 替代品时仍有价值；
 - 优化前必先测量，盲目 memo 反而增加心智成本。
+

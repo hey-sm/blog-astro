@@ -683,3 +683,4 @@ onUnmounted(() => console.log(`[${name}] unmounted`))
 - 缓存组件中的副作用（timer、observer、listener）必须在 deactivated 中清理；
 - KeepAlive 内的数据同步：通过 Pinia store 共享，或 activated 时 dirty 检查刷新；
 - KeepAlive 与 Suspense 嵌套时 KeepAlive 在外，避免缓存 Suspense 的中间状态。
+

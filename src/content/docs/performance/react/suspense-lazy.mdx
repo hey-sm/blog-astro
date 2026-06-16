@@ -631,3 +631,4 @@ const Settings = lazy(() => timed('settings', () => import('./Settings')))
 - startTransition 配合 Suspense 消除"flash of loading"，让导航无缝；
 - 预加载（hover / 视口可见时）是 Suspense 应用的"加速器"，让用户感觉切页是即时的；
 - Suspense 不会让代码加载更快——它只是协调 UI 等待，性能根本仍是分割与缓存。
+

@@ -3,6 +3,8 @@ title: App Router vs Pages Router
 description: Next.js 双路由体系差异、迁移决策矩阵、何时仍用 Pages Router
 ---
 
+import Markmap from '@components/Markmap.astro';
+
 # App Router vs Pages Router
 
 Next.js 同时支持两套路由系统。**新项目默认使用 App Router**，本系列文档也以 App Router 为基线。
@@ -27,66 +29,51 @@ Next.js 同时支持两套路由系统。**新项目默认使用 App Router**，
 
 ## 目录结构对比
 
-```mermaid
-flowchart LR
-  subgraph PagesRouter[Pages Router]
-    P0[pages/]
-    P1[_app.tsx<br/>全局外壳]
-    P2[_document.tsx<br/>HTML 骨架]
-    P3[index.tsx<br/>/]
-    P4[about.tsx<br/>/about]
-    P5[api/posts.ts<br/>/api/posts]
-    P0 --> P1
-    P0 --> P2
-    P0 --> P3
-    P0 --> P4
-    P0 --> P5
-  end
-
-  subgraph AppRouter[App Router]
-    A0[app/]
-    A1[layout.tsx<br/>根布局]
-    A2[page.tsx<br/>/]
-    A3[about/layout.tsx<br/>about 共享布局]
-    A4[about/page.tsx<br/>/about]
-    A5[blog/&lbrack;slug&rbrack;/page.tsx<br/>/blog/:slug]
-    A6[api/posts/route.ts<br/>/api/posts]
-    A0 --> A1
-    A0 --> A2
-    A0 --> A3 --> A4
-    A0 --> A5
-    A0 --> A6
-  end
-```
+<Markmap markdown={`
+# 目录结构对比
+- Pages Router（pages/）
+  - _app.tsx（全局外壳）
+  - _document.tsx（HTML 骨架）
+  - index.tsx → /
+  - about.tsx → /about
+  - api/posts.ts → /api/posts
+- App Router（app/）
+  - layout.tsx（根布局）
+  - page.tsx → /
+  - about/layout.tsx（about 共享布局）
+  - about/page.tsx → /about
+  - blog/[slug]/page.tsx → /blog/:slug
+  - api/posts/route.ts → /api/posts
+`} />
 
 ## 渲染模型详解
 
 ### Pages Router: "全部组件在客户端运行"
 
-```mermaid
-sequenceDiagram
-  participant S as 服务器
-  participant B as 浏览器
-  S->>S: 执行组件函数
-  S-->>B: 返回 HTML
-  B->>B: 下载 JS bundle
-  B->>B: 再次执行组件函数 hydrate
-  B->>B: 绑定事件
-  Note over B: 页面的 JS 全部发送到浏览器
-```
+<Markmap markdown={`
+# Pages Router 渲染流程
+- 服务器
+  - 执行组件函数
+  - 返回 HTML 给浏览器
+- 浏览器
+  - 下载 JS bundle
+  - 再次执行组件函数（hydrate）
+  - 绑定事件
+  - 页面的 JS 全部发送到浏览器
+`} />
 
 ### App Router: "默认是 Server，按需 Client"
 
-```mermaid
-sequenceDiagram
-  participant S as 服务器
-  participant B as 浏览器
-  S->>S: 执行 Server Components
-  S->>S: 生成 RSC Payload
-  S-->>B: 返回 HTML + RSC Payload
-  B->>B: 仅 hydrate 'use client' 节点
-  Note over S,B: Server Components 的 JS 不发送到浏览器
-```
+<Markmap markdown={`
+# App Router 渲染流程
+- 服务器
+  - 执行 Server Components
+  - 生成 RSC Payload
+  - 返回 HTML + RSC Payload 给浏览器
+- 浏览器
+  - 仅 hydrate 'use client' 节点
+  - Server Components 的 JS 不发送到浏览器
+`} />
 
 这意味着 App Router 中：
 - 只做数据展示的组件 **不发送 JS 包到浏览器**
@@ -99,19 +86,21 @@ sequenceDiagram
 
 两个路由系统可以**共存**在同一个项目：
 
-```mermaid
-flowchart TD
-  A[my-app] --> B[app/<br/>新功能用 App Router]
-  A --> C[pages/<br/>旧功能保留 Pages Router]
-  B --> B1[layout.tsx]
-  B --> B2[page.tsx]
-  C --> C1[_app.tsx]
-  C --> C2[index.tsx]
-
-  R[请求进入 Next.js] --> M{app/ 是否匹配}
-  M -->|是| B
-  M -->|否| C
-```
+<Markmap markdown={`
+# 渐进迁移（两套路由共存）
+- my-app
+  - app/（新功能用 App Router）
+    - layout.tsx
+    - page.tsx
+  - pages/（旧功能保留 Pages Router）
+    - _app.tsx
+    - index.tsx
+- 路由匹配顺序
+  - 请求进入 Next.js
+  - app/ 是否匹配
+    - 是 → App Router（app/）
+    - 否 → Pages Router（pages/）
+`} />
 
 Next.js 的路由匹配顺序：
 1. App Router 优先匹配 `app/`

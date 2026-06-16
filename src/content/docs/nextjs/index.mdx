@@ -2,32 +2,66 @@
 title: Next.js 知识体系导读
 ---
 
+import Markmap from '@components/Markmap.astro';
+
+
 # Next.js 知识体系导读
 
-```mermaid
-mindmap
-  root((Next.js 知识体系))
-    入门认知
-      技术定位
-      学习前置
-      最小示例
-    核心能力
-      基础语法
-      核心机制
-      常用 API
-    项目实践
-      工程结构
-      数据流
-      调试测试
-    进阶专题
-      性能优化
-      架构模式
-      生态工具
-```
+<Markmap markdown={`
+# Next.js 知识体系
+- 基础概念
+  - Next.js 简介
+    - 框架特点
+    - App Router
+    - Pages Router
+  - 路由系统
+    - 文件路由
+    - 动态路由
+    - 路由组
+    - 并行路由
+  - 渲染模式
+    - SSR
+    - SSG
+    - ISR
+    - CSR
+- 核心功能
+  - 数据获取
+    - Server Components
+    - fetch API
+    - 数据缓存
+    - Revalidate
+  - 样式方案
+    - CSS Modules
+    - Tailwind CSS
+    - CSS-in-JS
+  - 图片优化
+    - Image 组件
+    - 自动优化
+    - 响应式图片
+  - 字体优化
+    - next/font
+    - Google Fonts
+- 高级特性
+  - API Routes
+    - Route Handlers
+    - 中间件
+  - Server Actions
+  - Metadata
+    - SEO 优化
+    - Open Graph
+  - 国际化
+    - i18n 路由
+    - 多语言
+  - 性能优化
+    - 代码分割
+    - 预加载
+    - Bundle 分析
+- 部署与配置
+  - Vercel 部署
+  - 环境变量
+  - next.config.js
+`} />
 
-本系列文档以 [roadmap.sh Next.js 路线图](https://roadmap.sh/nextjs) 为骨架展开，**Next.js 16 为示例基线**，覆盖从项目初始化到部署运维的完整路径。每章配有可运行的代码片段、配置示例与"何时不要用"的反推。
-
-阅读对象为已具备 [React 核心知识](/react) 的前端工程师。App Router、Server Components、Server Actions、PPR 等较新主题会单独标注版本。
 
 ## 章节结构
 
@@ -84,3 +118,4 @@ mindmap
 ## 起点
 
 请从 [简介与优势](/nextjs/introduction) 开始。
+

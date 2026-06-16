@@ -726,3 +726,4 @@ const expensive = computed(() => {
 - `deep: true` 性能开销大，配合 shallow API 或重新设计；
 - 派生关系用 computed 链表达——避免命令式 watch 链导致雪崩；
 - computed 拆分到合适粒度——每个独立缓存，让局部变化只重算局部。
+

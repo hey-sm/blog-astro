@@ -2,32 +2,86 @@
 title: Vue 知识体系导读
 ---
 
+import Markmap from '@components/Markmap.astro';
+
+
 # Vue 知识体系导读
 
-```mermaid
-mindmap
-  root((Vue 知识体系))
-    入门认知
-      技术定位
-      学习前置
-      最小示例
-    核心能力
-      基础语法
-      核心机制
-      常用 API
-    项目实践
-      工程结构
-      数据流
-      调试测试
-    进阶专题
-      性能优化
-      架构模式
-      生态工具
-```
+<Markmap markdown={`
+# Vue 知识体系
+- 基础入门
+  - 简介与心智模型
+    - 响应式系统
+    - 声明式渲染
+    - MVVM
+    - 虚拟 DOM
+  - 工具链
+    - create-vue
+    - Vite + TypeScript
+  - 单文件组件
+    - SFC 结构
+    - script setup
+    - CSS Scoped
+- 核心概念
+  - 模板语法
+    - 插值表达式
+    - v-text / v-html
+    - v-once / v-pre
+  - 指令系统
+    - v-bind
+    - v-if / v-show
+    - v-for
+    - v-on
+    - v-model
+  - 组件系统
+    - 组件注册
+    - Props
+    - Events
+    - v-model
+  - 渲染机制
+    - 虚拟 DOM
+    - 条件渲染
+    - 列表渲染
+    - Key 优化
+- 响应式开发
+  - 计算属性与侦听器
+    - computed
+    - watch
+    - watchEffect
+  - API 风格
+    - Options API
+    - Composition API
+  - 生命周期
+    - onMounted
+    - onUpdated
+    - onUnmounted
+  - 事件处理
+    - 事件绑定
+    - 修饰符
+  - 表单处理
+    - Input Bindings
+    - v-model
+- 进阶特性
+  - 高级功能
+    - 异步组件
+    - Suspense
+    - Teleport
+    - Provide/Inject
+  - 插槽系统
+    - 默认插槽
+    - 具名插槽
+    - 作用域插槽
+  - 自定义指令
+  - 插件系统
+  - 状态管理
+    - Pinia
+    - Vuex
+  - 路由
+    - Vue Router
+  - 服务端渲染
+    - Nuxt.js
+`} />
 
-本系列文档以 [roadmap.sh Vue 路线图](https://roadmap.sh/vue) 为骨架展开，**Vue 3 为示例基线**，覆盖从响应式系统到工程化生态的完整路径。每章配有可运行的代码片段、API 类型签名与最佳实践。
-
-阅读对象为已具备 [JavaScript 核心知识](/js) 的前端工程师。Composition API、`<script setup>`、Teleport 等 Vue 3 特性会贯穿全文。
 
 ## 章节结构
 
@@ -96,3 +150,4 @@ mindmap
 ## 起点
 
 请从 [简介与心智模型](/vue/introduction) 开始。
+

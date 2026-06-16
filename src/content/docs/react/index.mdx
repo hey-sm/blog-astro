@@ -2,32 +2,83 @@
 title: React 知识体系导读
 ---
 
+import Markmap from '@components/Markmap.astro';
+
+
 # React 知识体系导读
 
-```mermaid
-mindmap
-  root((React 知识体系))
-    入门认知
-      技术定位
-      学习前置
-      最小示例
-    核心能力
-      基础语法
-      核心机制
-      常用 API
-    项目实践
-      工程结构
-      数据流
-      调试测试
-    进阶专题
-      性能优化
-      架构模式
-      生态工具
-```
+<Markmap markdown={`
+# React 知识体系
+- 基础入门
+  - 简介与心智模型
+    - 声明式渲染
+    - 单向数据流
+    - Reconciler
+    - 虚拟 DOM
+  - 工具链
+    - Vite + TypeScript
+    - ESLint
+  - 组件
+    - JSX 语法
+    - 函数组件
+    - Props vs State
+    - 组件组合
+- 核心能力
+  - 渲染机制
+    - Lists / Keys
+    - 合成事件
+    - Refs
+    - HOC
+    - Render Props
+  - Hooks
+    - 内置 Hook
+    - 自定义 Hook
+    - 依赖数组
+    - 闭包陷阱
+  - 状态管理
+    - Context API
+    - Zustand
+    - Jotai
+    - MobX
+- 工程实践
+  - 路由
+    - React Router
+    - TanStack Router
+  - 样式方案
+    - CSS Modules
+    - Tailwind
+    - CSS-in-JS
+    - Headless UI
+  - 数据请求
+    - TanStack Query
+    - SWR
+    - Axios
+    - GraphQL
+  - 表单与校验
+    - React Hook Form
+    - Formik
+    - Zod
+  - 测试
+    - Vitest / Jest
+    - Testing Library
+    - Cypress
+    - Playwright
+- 进阶专题
+  - 高级主题
+    - Suspense
+    - Error Boundary
+    - Portals
+    - Server Components
+  - 动画
+    - Framer Motion
+    - react-spring
+    - GSAP
+  - 框架
+    - Next.js
+    - Astro
+  - React Native
+`} />
 
-本系列文档以 [roadmap.sh React 路线图](https://roadmap.sh/react) 为骨架展开，**React 19 为示例基线**，覆盖从语言级心智模型到工程化生态的完整路径。每章配有可运行的代码片段、API 类型签名与"何时不要用"的反推。
-
-阅读对象为已具备 [JavaScript 核心知识](/js) 的前端工程师。Hook、并发渲染、Server Components 等较新主题会单独标注 React 版本。
 
 ## 章节结构
 
@@ -69,3 +120,4 @@ mindmap
 ## 起点
 
 请从 [简介与心智模型](/react/introduction) 开始。
+

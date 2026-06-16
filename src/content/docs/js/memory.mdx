@@ -351,3 +351,4 @@ for (let i = 0; i < 1e6; i++) {
 - 内存泄漏的根因始终是"对象意外保持可达"，常见来源是定时器、监听器、闭包、缓存；
 - `WeakMap` / `WeakRef` / `FinalizationRegistry` 提供弱引用工具，但不应依赖回收时机；
 - DevTools Heap snapshot 是排查泄漏的标准手段。
+

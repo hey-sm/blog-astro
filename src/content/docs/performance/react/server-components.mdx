@@ -681,3 +681,4 @@ NEXT_PRIVATE_TIMING=1 next dev
 - 流式 RSC + 并行预取 = 解决数据瀑布的最优解，总时间 ≈ max(各请求) 而非 sum；
 - 跨边界只能传可序列化数据——函数（除 Server Action）、类实例都不行；
 - RSC 强绑定 Next.js / Waku 等框架，纯 SPA / 静态站可能不需要，需评估场景。
+

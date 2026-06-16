@@ -2,32 +2,69 @@
 title: CSS 知识体系导读
 ---
 
+import Markmap from '@components/Markmap.astro';
+
+
 # CSS 知识体系导读
 
-```mermaid
-mindmap
-  root((CSS 知识体系))
-    入门认知
-      技术定位
-      学习前置
-      最小示例
-    核心能力
-      基础语法
-      核心机制
-      常用 API
-    项目实践
-      工程结构
-      数据流
-      调试测试
-    进阶专题
-      性能优化
-      架构模式
-      生态工具
-```
+<Markmap markdown={`
+# CSS 知识体系
+- 基础语法
+  - 选择器
+    - 基础选择器
+    - 组合选择器
+    - 伪类
+    - 伪元素
+  - 盒模型
+    - content-box
+    - border-box
+    - margin / padding
+  - 布局基础
+    - display
+    - position
+    - float
+    - clear
+- 现代布局
+  - Flexbox
+    - flex 容器
+    - flex 项目
+    - 对齐方式
+  - Grid
+    - 网格容器
+    - 网格项目
+    - 区域布局
+  - 响应式设计
+    - Media Queries
+    - 移动优先
+    - 断点设计
+- 样式进阶
+  - 颜色与渐变
+    - 颜色模式
+    - 线性渐变
+    - 径向渐变
+  - 变换与动画
+    - transform
+    - transition
+    - animation
+    - @keyframes
+  - 字体与排版
+    - font-family
+    - Web Fonts
+    - 文本样式
+- 工程化
+  - 预处理器
+    - Sass / SCSS
+    - Less
+    - 变量与嵌套
+  - CSS-in-JS
+    - Styled Components
+    - Emotion
+  - 原子化 CSS
+    - Tailwind CSS
+    - UnoCSS
+  - CSS Modules
+`} />
 
-本系列文档以 [roadmap.sh CSS 路线图](https://roadmap.sh/css) 为骨架，**Tailwind CSS 4 为现代化对照基线**。每章按"原生 CSS 写法 ↔ Tailwind 等价类"双栏组织，目标是让读者既理解底层机制，又能上手主流工程实践。
-
-阅读对象为已具备 HTML 基础的前端开发者。预处理器（Sass / PostCSS）与 CSS-in-JS 的工程实践集中在 [工程化](/css/methodologies)。
 
 ## 章节结构
 
@@ -90,3 +127,4 @@ mindmap
 ## 起点
 
 请从 [简介与心智模型](/css/introduction) 开始。
+

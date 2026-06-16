@@ -246,3 +246,4 @@ app/blog/[slug]/page.tsx
 - `error.tsx` 是错误边界，要求 `'use client'`，捕获 page 但不捕获 layout；
 - `global-error.tsx` 是最后的兜底，在 layout 崩溃时产生，须含 `<html>` + `<body>`；
 - `not-found.tsx` 通过 `notFound()` 调用触发，逐级回退。
+

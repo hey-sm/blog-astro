@@ -606,3 +606,4 @@ function ProductCatalog({ allProducts }) {
 - 被 defer 的组件需要 memo / Compiler 配合，否则紧急渲染时一样会重渲染；
 - 输入框 value 必须紧急——defer 的是下游消费者，不是输入源；
 - 状态库需支持 useSyncExternalStore 才能在并发场景下避免 tearing。
+

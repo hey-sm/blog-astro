@@ -2,30 +2,58 @@
 title: 前端性能知识体系导读
 ---
 
+import Markmap from '@components/Markmap.astro';
+
+
 # 前端性能知识体系导读
 
-```mermaid
-mindmap
-  root((前端性能知识体系))
-    入门认知
-      技术定位
-      学习前置
-      最小示例
-    核心能力
-      基础语法
-      核心机制
-      常用 API
-    项目实践
-      工程结构
-      数据流
-      调试测试
-    进阶专题
-      性能优化
-      架构模式
-      生态工具
-```
-
-本系列文档以 [roadmap.sh Frontend Performance 路线图](https://roadmap.sh/frontend-performance) 为骨架，按"指标 → 网络 → 资源 → 框架 → 工具"的脉络系统化梳理现代 Web 前端性能优化知识。每章配有可运行示例与实测数据，目标读者为已具备基础前端经验、希望系统化掌握性能工程的开发者。
+<Markmap markdown={`
+# 前端性能优化
+- 性能指标
+  - Core Web Vitals
+    - LCP
+    - FID / INP
+    - CLS
+  - 其他指标
+    - FCP
+    - TTFB
+    - TTI
+- 加载优化
+  - 资源优化
+    - 代码分割
+    - Tree Shaking
+    - 懒加载
+    - 预加载
+  - 图片优化
+    - 格式选择
+    - 压缩
+    - 响应式图片
+    - CDN
+  - 字体优化
+    - font-display
+    - 字体子集
+    - 预加载
+- 渲染优化
+  - 关键渲染路径
+    - DOM / CSSOM
+    - 渲染树
+    - 布局与绘制
+  - CSS 优化
+    - 选择器性能
+    - 减少重排重绘
+    - GPU 加速
+  - JavaScript 优化
+    - 长任务优化
+    - 防抖节流
+    - Web Worker
+- 框架优化
+  - React 优化
+  - Vue 优化
+- 监控与分析
+  - Lighthouse
+  - Performance API
+  - 真实用户监控
+`} />
 
 ## 章节结构
 
@@ -126,3 +154,5 @@ mindmap
 ## 起点
 
 请从 [性能指标与预算](/performance/metrics) 开始。
+
+

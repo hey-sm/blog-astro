@@ -1,0 +1,198 @@
+---
+interface Props {
+  markdown: string;
+}
+
+const { markdown } = Astro.props;
+const id = `markmap-${Math.random().toString(36).slice(2, 11)}`;
+const idFull = `${id}-full`;
+---
+
+<div class="markmap-container relative w-full h-100 border border-[--sl-color-gray-5] rounded-lg my-4 overflow-hidden bg-[--sl-color-bg]">
+  <div class="markmap-loading absolute inset-0 flex items-center justify-center bg-[--sl-color-bg] transition-opacity duration-300 opacity-100 pointer-events-none z-20">
+    <div class="text-[--sl-color-text-accent]">加载中...</div>
+  </div>
+  <button
+    class="fullscreen-btn absolute top-2 right-2 z-10 bg-transparent border-0 rounded p-1 cursor-pointer flex items-center justify-center transition-all duration-200 text-[--sl-color-text] hover:bg-[--sl-color-gray-5]"
+    data-target={id}
+    title="全屏查看"
+  >
+    <svg class="expand-icon block" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+    </svg>
+    <svg class="close-icon hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M18 6L6 18M6 6l12 12"></path>
+    </svg>
+  </button>
+  <!-- 普通模式 SVG（展开2层）-->
+  <svg id={id} class="markmap-svg w-full h-full absolute inset-0"></svg>
+  <!-- 全屏模式 SVG（展开所有层级，初始隐藏）-->
+  <svg id={idFull} class="markmap-svg w-full h-full absolute inset-0 invisible pointer-events-none"></svg>
+</div>
+
+<style>
+  .markmap-loading.hidden {
+    opacity: 0;
+  }
+
+  .markmap-svg.loaded {
+    opacity: 1;
+    transition: opacity 0.3s;
+  }
+
+  .markmap-container:fullscreen {
+    height: 100vh;
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    background-color: var(--sl-color-bg);
+  }
+
+  .markmap-container:fullscreen .fullscreen-btn {
+    top: 1rem;
+    right: 1rem;
+  }
+
+  .markmap-container:fullscreen .fullscreen-btn .expand-icon {
+    display: none;
+  }
+
+  .markmap-container:fullscreen .fullscreen-btn .close-icon {
+    display: block;
+  }
+</style>
+
+<script>
+  import { Transformer } from 'markmap-lib';
+  import { Markmap } from 'markmap-view';
+
+  const transformer = new Transformer();
+  // 容器 -> { mmNormal, mmFull, containerNormal, containerFull }
+  const instances = new WeakMap();
+
+  // 初始化当前页面所有未渲染的 markmap 容器
+  function initMarkmaps() {
+    const containers = document.querySelectorAll('svg[id^="markmap-"]:not([id$="-full"]):not([data-mm-ready])');
+
+    containers.forEach((container) => {
+      const markdown = container.getAttribute('data-markdown');
+      if (!markdown) return;
+      container.setAttribute('data-mm-ready', 'true');
+
+      const containerFull = document.getElementById(container.id + '-full');
+      if (!containerFull) return;
+
+      try {
+        const { root } = transformer.transform(markdown);
+        const { root: rootFull } = transformer.transform(markdown);
+
+        // 创建普通模式实例（展开2层）
+        const mmNormal = Markmap.create(container, {
+          duration: 0,
+          maxWidth: 300,
+          spacingVertical: 10,
+          spacingHorizontal: 80,
+          paddingX: 10,
+          autoFit: true,
+          initialExpandLevel: 3,
+        });
+        mmNormal.setData(root);
+        mmNormal.fit();
+
+        // 创建全屏模式实例（展开所有层级）
+        const mmFull = Markmap.create(containerFull, {
+          duration: 0,
+          maxWidth: 300,
+          spacingVertical: 10,
+          spacingHorizontal: 80,
+          paddingX: 10,
+          autoFit: true,
+          initialExpandLevel: -1,
+        });
+        mmFull.setData(rootFull);
+        mmFull.fit();
+
+        // 渲染完成后显示普通模式的图表
+        requestAnimationFrame(() => {
+          container.classList.add('loaded');
+          const loading = container.parentElement?.querySelector('.markmap-loading');
+          if (loading) {
+            loading.classList.add('hidden');
+          }
+        });
+
+        // 保存两个实例
+        instances.set(container, { mmNormal, mmFull, containerNormal: container, containerFull });
+
+        // 监听容器大小变化
+        const observer = new ResizeObserver(() => {
+          const inst = instances.get(container);
+          if (!inst) return;
+          // 根据当前可见的容器来调用对应的 fit
+          if (!inst.containerNormal.classList.contains('invisible')) {
+            inst.mmNormal.fit();
+          }
+          if (!inst.containerFull.classList.contains('invisible')) {
+            inst.mmFull.fit();
+          }
+        });
+        observer.observe(container.parentElement);
+
+        // 全屏按钮
+        const btn = container.parentElement?.querySelector('.fullscreen-btn');
+        btn?.addEventListener('click', () => {
+          const wrap = container.parentElement;
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          } else {
+            wrap?.requestFullscreen();
+          }
+        });
+      } catch (e) {
+        console.error('Failed to initialize markmap:', e);
+      }
+    });
+  }
+
+  // 全屏切换：瞬间切换两个实例
+  document.addEventListener('fullscreenchange', () => {
+    document.querySelectorAll('svg[id^="markmap-"]:not([id$="-full"])[data-mm-ready]').forEach((container) => {
+      const inst = instances.get(container);
+      if (!inst) return;
+      const wrap = container.parentElement;
+
+      if (document.fullscreenElement === wrap) {
+        // 进入全屏：隐藏普通实例，显示全屏实例
+        inst.containerNormal.classList.add('invisible', 'pointer-events-none');
+        inst.containerFull.classList.remove('invisible', 'pointer-events-none');
+        requestAnimationFrame(() => inst.mmFull.fit());
+      } else if (!document.fullscreenElement && wrap) {
+        // 退出全屏：隐藏全屏实例，显示普通实例
+        inst.containerFull.classList.add('invisible', 'pointer-events-none');
+        inst.containerNormal.classList.remove('invisible', 'pointer-events-none');
+        requestAnimationFrame(() => inst.mmNormal.fit());
+      }
+    });
+  });
+
+  // 首次加载与 Starlight 客户端导航（SPA）后都会触发
+  document.addEventListener('astro:page-load', initMarkmaps);
+
+  // 立即执行一次，以防事件已经触发
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMarkmaps);
+  } else {
+    initMarkmaps();
+  }
+</script>
+
+<script define:vars={{ id, idFull, markdown }}>
+  const container = document.getElementById(id);
+  const containerFull = document.getElementById(idFull);
+  if (container) {
+    container.setAttribute('data-markdown', markdown);
+  }
+  if (containerFull) {
+    containerFull.setAttribute('data-markdown', markdown);
+  }
+</script>

@@ -262,3 +262,4 @@ const posts = await db.post.findMany({
 - Serverless 需要 HTTP 驱动（Neon / PlanetScale / Prisma Accelerate），避免传统 TCP pool；
 - `'server-only'` + `globalThis` 缓存防止客户端泄漏与连接耗尽；
 - 迁移自动化为 Prisma: `migrate deploy`，Drizzle: `drizzle-kit migrate`。
+

@@ -1,0 +1,5 @@
+/* Tailwind v4：只引入主题变量与 utility，不引入 preflight（CSS reset）。
+   preflight 会覆盖 Starlight 的默认样式（标题、列表、间距等），
+   因此这里跳过它，Tailwind 仅作为自定义组件的 utility class 工具使用。 */
+@import "tailwindcss/theme";
+@import "tailwindcss/utilities";

@@ -4,10 +4,7 @@ title: TypeScript 知识体系导读
 
 import Markmap from '@components/Markmap.astro';
 
-
-# TypeScript 知识体系导读
-
-<Markmap markdown={`
+export const tsTree = `
 # TypeScript 知识体系
 - 基础概念
   - TypeScript 简介
@@ -65,7 +62,11 @@ import Markmap from '@components/Markmap.astro';
     - tsconfig.json
     - 编译选项
     - 类型声明
-`} />
+`;
+
+# TypeScript 知识体系导读
+
+<Markmap markdown={tsTree} />
 
 
 ## 章节结构
@@ -121,7 +122,7 @@ import Markmap from '@components/Markmap.astro';
     label: string
     onClick: () => void
   }
-  
+
   export function Button({ label, onClick }: ButtonProps) {
     return <button onClick={onClick}>{label}</button>
   }

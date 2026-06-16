@@ -4,10 +4,7 @@ title: Next.js 知识体系导读
 
 import Markmap from '@components/Markmap.astro';
 
-
-# Next.js 知识体系导读
-
-<Markmap markdown={`
+export const nextjsTree = `
 # Next.js 知识体系
 - 基础概念
   - Next.js 简介
@@ -60,7 +57,11 @@ import Markmap from '@components/Markmap.astro';
   - Vercel 部署
   - 环境变量
   - next.config.js
-`} />
+`;
+
+# Next.js 知识体系导读
+
+<Markmap markdown={nextjsTree} />
 
 
 ## 章节结构

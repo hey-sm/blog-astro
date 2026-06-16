@@ -4,10 +4,7 @@ title: 前端性能知识体系导读
 
 import Markmap from '@components/Markmap.astro';
 
-
-# 前端性能知识体系导读
-
-<Markmap markdown={`
+export const performanceTree = `
 # 前端性能优化
 - 性能指标
   - Core Web Vitals
@@ -53,7 +50,11 @@ import Markmap from '@components/Markmap.astro';
   - Lighthouse
   - Performance API
   - 真实用户监控
-`} />
+`;
+
+# 前端性能知识体系导读
+
+<Markmap markdown={performanceTree} />
 
 ## 章节结构
 

@@ -4,10 +4,7 @@ title: CSS 知识体系导读
 
 import Markmap from '@components/Markmap.astro';
 
-
-# CSS 知识体系导读
-
-<Markmap markdown={`
+export const cssTree = `
 # CSS 知识体系
 - 基础语法
   - 选择器
@@ -63,7 +60,11 @@ import Markmap from '@components/Markmap.astro';
     - Tailwind CSS
     - UnoCSS
   - CSS Modules
-`} />
+`;
+
+# CSS 知识体系导读
+
+<Markmap markdown={cssTree} />
 
 
 ## 章节结构

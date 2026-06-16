@@ -4,10 +4,7 @@ title: Flutter 知识体系导读
 
 import Markmap from '@components/Markmap.astro';
 
-
-# Flutter 知识体系导读
-
-<Markmap markdown={`
+export const flutterTree = `
 # Flutter 知识体系
 - 基础入门
   - Flutter 简介
@@ -68,7 +65,11 @@ import Markmap from '@components/Markmap.astro';
     - 集成测试
   - CI/CD
   - 发布上架
-`} />
+`;
+
+# Flutter 知识体系导读
+
+<Markmap markdown={flutterTree} />
 
 
 ## 章节结构

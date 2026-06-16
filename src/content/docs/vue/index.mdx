@@ -4,10 +4,7 @@ title: Vue 知识体系导读
 
 import Markmap from '@components/Markmap.astro';
 
-
-# Vue 知识体系导读
-
-<Markmap markdown={`
+export const vueTree = `
 # Vue 知识体系
 - 基础入门
   - 简介与心智模型
@@ -80,7 +77,11 @@ import Markmap from '@components/Markmap.astro';
     - Vue Router
   - 服务端渲染
     - Nuxt.js
-`} />
+`;
+
+# Vue 知识体系导读
+
+<Markmap markdown={vueTree} />
 
 
 ## 章节结构

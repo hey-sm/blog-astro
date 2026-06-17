@@ -53,71 +53,6 @@ article > h1:first-child {
   display: none !important;
 }
 
-/* 调整内容区域顶部间距 */
-.sl-markdown-content {
-  padding-top: 0 !important;
-}
-
-/* 整体布局 - 左右结构 */
-.page {
-  padding: 0 !important;
-  gap: 0 !important;
-}
-
-/* 移除外层容器的 padding 和 margin */
-body,
-html {
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
-/* 左侧边栏固定宽度 */
-.sidebar-pane {
-  width: 280px !important;
-}
-
-/* 右侧整体（内容+目录的容器）内部布局 */
-.lg\:sl-flex {
-  display: flex !important;
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  justify-content: center !important;
-  gap: 0 !important;
-}
-
-/* 移除内容容器的默认 max-width 限制 */
-.sl-container {
-  max-width: none !important;
-}
-
-/* 中间内容区域 - 在剩余空间中居中 */
-.main-pane {
-  flex: 1 !important;
-  max-width: 1200px !important;
-  margin: 0 auto !important;
-  padding: 2rem !important;
-}
-
-/* 右侧目录固定宽度 */
-.right-sidebar-container {
-  width: 280px !important;
-  min-width: 280px !important;
-  flex-shrink: 0 !important;
-}
-
-.right-sidebar {
-  width: 280px !important;
-  padding: 1rem !important;
-}
-
-/* 响应式：小屏幕隐藏右侧栏 */
-@media (max-width: 1024px) {
-  .right-sidebar-container {
-    display: none !important;
-  }
-}
 
 /* 左侧菜单栏滚动条样式 */
 .sidebar-pane {
@@ -153,20 +88,4 @@ html {
 
 :root[data-theme='dark'] .sidebar-pane::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.2);
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .header {
-    padding: 0.75rem 1rem;
-  }
-
-  .site-title {
-    font-size: 1.1rem;
-  }
-
-  .site-title svg {
-    width: 24px;
-    height: 24px;
-  }
 }

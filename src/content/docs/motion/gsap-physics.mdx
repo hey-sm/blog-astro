@@ -1,0 +1,264 @@
+---
+title: 物理动画
+description: Physics2D 与 PhysicsProps——重力、摩擦、加速度，模拟真实物理
+---
+
+# 物理动画
+
+GSAP 提供两个轻量物理插件——不是 Matter.js 那种完整 2D 物理引擎，而是把"重力、摩擦、加速度"这类参数化运动做成动画方案。
+
+> 两个插件都在 3.13 起免费可商用。
+
+## Physics2D：2D 重力 / 加速度
+
+设置初始速度 + 加速度，元素自然运动。
+
+### 安装
+
+```tsx
+import gsap from 'gsap'
+import { Physics2DPlugin } from 'gsap/Physics2DPlugin'
+
+gsap.registerPlugin(Physics2DPlugin)
+```
+
+### 基础示例
+
+```tsx filename="components/FallingBall.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { Physics2DPlugin } from 'gsap/Physics2DPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(Physics2DPlugin)
+
+export function FallingBall() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.to('.ball', {
+        duration: 2,
+        physics2D: {
+          velocity: 200,        // 初始速度
+          angle: -60,           // 发射角度（度，0 = 右，-90 = 上）
+          gravity: 500,         // 重力加速度
+        },
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container} className="h-96 relative">
+      <div className="ball absolute size-8 rounded-full bg-red-500 bottom-0" />
+    </div>
+  )
+}
+```
+
+发射一颗"球"——按 60 度向上飞，重力把它拉回——抛物线轨迹自然形成。
+
+### 配置参数
+
+| 字段 | 含义 |
+| ---- | ---- |
+| `velocity` | 初始速度（像素/秒） |
+| `angle` | 发射角度（度数） |
+| `gravity` | 重力（每秒加速度） |
+| `friction` | 摩擦（0~1，越大减速越快） |
+| `xVelocity` / `yVelocity` | 直接给 X/Y 分量速度（替代 velocity + angle） |
+| `acceleration` / `accelerationAngle` | 任意方向的加速度（除了重力外） |
+
+### 烟花碎片
+
+```tsx
+useGSAP(() => {
+  const particles = gsap.utils.toArray('.particle')
+  particles.forEach(p => {
+    gsap.to(p as HTMLElement, {
+      duration: 2,
+      physics2D: {
+        velocity: Math.random() * 500 + 200,
+        angle: Math.random() * 360,
+        gravity: 300,
+      },
+      opacity: 0,
+      ease: 'none',
+    })
+  })
+}, { scope: container })
+```
+
+每个碎片随机方向、随机速度，受重力影响——烟花、爆炸碎片、粒子动画。
+
+### 弹跳球
+
+```tsx
+gsap.to('.ball', {
+  duration: 2,
+  physics2D: {
+    velocity: 0,
+    angle: 90,
+    gravity: 800,
+    friction: 0.1,
+  },
+})
+```
+
+下落 + 摩擦减速——但 GSAP 不内置"碰到地面反弹"——需要自己监听位置或用 `[bounce](/motion/gsap-easing)` 缓动函数模拟。
+
+> 需要真正的碰撞反弹？用 Matter.js + GSAP 渲染。Physics2D 适合"无碰撞的飞行物"。
+
+## PhysicsProps：任意属性的物理曲线
+
+不只 X/Y——任何数值属性都能用物理曲线驱动：
+
+### 基础用法
+
+```tsx
+import { PhysicsPropsPlugin } from 'gsap/PhysicsPropsPlugin'
+gsap.registerPlugin(PhysicsPropsPlugin)
+
+gsap.to('.box', {
+  duration: 2,
+  physicsProps: {
+    rotation: { velocity: 360, friction: 0.05 },
+    scale: { velocity: 1, friction: 0.1, acceleration: -2 },
+  },
+})
+```
+
+旋转初始角速度 360°/s 但摩擦减速；scale 初速度 1，加速度 -2（往回缩）。
+
+### 与 Physics2D 的区别
+
+| 维度 | Physics2D | PhysicsProps |
+| ---- | --------- | ------------ |
+| 属性 | x / y（位置） | 任意属性 |
+| 重力 | ⭐ 内置 | 通过 acceleration 模拟 |
+| 角度发射 | ⭐ 直观 | 需要拆 x/y velocity |
+
+**位置 / 抛物线场景用 Physics2D；其他属性（rotation / scale / opacity 等）用 PhysicsProps**。
+
+## 何时用物理动画
+
+适合：
+
+- 烟花 / 爆炸粒子
+- 落叶 / 雪花
+- 弹道 / 子弹
+- 旋转减速（陀螺停下来）
+- 自由发挥的装饰动画
+
+不适合：
+
+- 精确控制路径（用 MotionPath）
+- 真实碰撞 / 重叠（用 Matter.js）
+- 简单的"按下变大" UI 反馈（用 spring）
+
+## 实战：粒子点击迸发
+
+```tsx filename="components/ClickBurst.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { Physics2DPlugin } from 'gsap/Physics2DPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(Physics2DPlugin)
+
+export function ClickBurst() {
+  const container = useRef<HTMLDivElement>(null)
+
+  const burst = (e: React.MouseEvent) => {
+    if (!container.current) return
+    const rect = container.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    for (let i = 0; i < 20; i++) {
+      const dot = document.createElement('div')
+      dot.className = 'particle absolute size-2 rounded-full bg-yellow-400'
+      dot.style.left = `${x}px`
+      dot.style.top = `${y}px`
+      container.current.appendChild(dot)
+
+      gsap.to(dot, {
+        duration: 1 + Math.random(),
+        physics2D: {
+          velocity: 200 + Math.random() * 300,
+          angle: Math.random() * 360,
+          gravity: 500,
+        },
+        opacity: 0,
+        onComplete: () => dot.remove(),
+      })
+    }
+  }
+
+  return (
+    <div
+      ref={container}
+      onClick={burst}
+      className="relative h-96 bg-gray-900 cursor-pointer"
+    />
+  )
+}
+```
+
+点击任意位置迸发 20 个粒子——每个独立物理参数，最后自动清理。
+
+## 与 Motion 的对比
+
+Motion 默认就是物理弹簧（spring），但只是简单的 stiffness / damping——做不了"重力 + 角度发射"这种**真物理动画**。
+
+要在 Motion 里做粒子迸发，得手动算每个粒子的 x / y 坐标 + 自己写每帧更新。GSAP Physics2D 几行解决——这是它的强项。
+
+## 陷阱
+
+### 加速度方向
+
+`angle: 0` 是**正 X 方向**（向右）、`angle: 90` 是**正 Y 方向**——但 CSS 的 Y 轴是向**下**为正！所以 `angle: 90` 是向下，`angle: -90` 是向上。
+
+```tsx
+angle: -45   // 右上方
+angle: 90    // 向下
+angle: -90   // 向上
+```
+
+记口诀：**CSS Y 向下为正，GSAP 物理角度顺时针**。
+
+### 计算开销
+
+物理动画每帧重算位置——大量粒子（100+）同时跑会卡。考虑：
+
+- 减少粒子数
+- 用 Canvas 渲染（一个 canvas vs 一堆 DOM）
+- 限制动画区域内
+
+### 没有边界
+
+Physics2D 不知道"地面"在哪——元素会一直飞出屏幕。要"触地反弹"需要在 `onUpdate` 里检测：
+
+```tsx
+gsap.to('.ball', {
+  physics2D: { velocity: 200, angle: -60, gravity: 500 },
+  onUpdate: function () {
+    const y = gsap.getProperty(this.targets()[0], 'y') as number
+    if (y > 300) {
+      // 反弹逻辑
+    }
+  },
+})
+```
+
+复杂的话直接上 Matter.js 等真物理引擎。
+
+## 小结
+
+- Physics2D：抛物线、烟花、粒子运动——速度 + 角度 + 重力
+- PhysicsProps：任意属性的物理曲线（旋转减速、缩放回弹等）
+- 不是真物理引擎——没有碰撞、没有边界检测
+- GSAP 角度顺时针（不同于数学约定）、Y 轴向下为正（CSS 标准）
+- 大量粒子建议 Canvas 渲染
+- Motion 没有等价物——只能模拟简单弹簧

@@ -1,0 +1,241 @@
+---
+title: Observer
+description: 统一鼠标 / 触摸 / 滚轮事件——一个 API 监听所有输入手势
+---
+
+# Observer
+
+`Observer` 是 GSAP 的"输入事件统一层"——把鼠标、触摸、滚轮、指针事件抽象成统一回调，让你不用关心用户是用什么设备操作。
+
+## 它解决什么问题
+
+写"滚动到下一屏"这种交互时，浏览器分散了几个事件：
+
+- 桌面：`wheel`（滚轮）+ `keydown`（PageDown）
+- 移动：`touchstart` / `touchmove` / `touchend`
+- 触控板：`wheel`（连续小增量）
+- 笔记本触摸屏：兼有
+
+手写要处理一堆边界条件。Observer 给你一个**抽象方向（up/down/left/right）+ 速度**，剩下不管。
+
+## 安装
+
+```tsx
+import gsap from 'gsap'
+import { Observer } from 'gsap/Observer'
+
+gsap.registerPlugin(Observer)
+```
+
+## 最简单的用法
+
+```tsx filename="components/SwipeNav.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { Observer } from 'gsap/Observer'
+import { useRef, useState } from 'react'
+
+gsap.registerPlugin(Observer)
+
+export function SwipeNav() {
+  const container = useRef<HTMLDivElement>(null)
+  const [page, setPage] = useState(0)
+
+  useGSAP(
+    () => {
+      Observer.create({
+        target: container.current,
+        type: 'wheel, touch, pointer',
+        onUp: () => setPage(p => Math.max(0, p - 1)),
+        onDown: () => setPage(p => Math.min(3, p + 1)),
+        wheelSpeed: -1,        // 反转滚轮方向
+        tolerance: 10,         // 触发阈值（像素）
+      })
+    },
+    { scope: container }
+  )
+
+  return <div ref={container}>当前页：{page}</div>
+}
+```
+
+向上滑 / 向下滚 / 向上推 — 都触发 `onUp`；反向触发 `onDown`。**一个回调通吃所有设备**。
+
+## 配置选项
+
+```tsx
+Observer.create({
+  target: container.current,
+  type: 'wheel, touch, pointer',  // 监听哪些事件类型
+  onUp: () => {},
+  onDown: () => {},
+  onLeft: () => {},
+  onRight: () => {},
+  onClick: () => {},
+  onPress: () => {},
+  onRelease: () => {},
+  onChange: () => {},          // 任何变化
+  onDrag: () => {},            // 拖拽中
+  tolerance: 10,               // 触发距离阈值（像素）
+  preventDefault: true,        // 阻止浏览器默认行为
+  wheelSpeed: 1,               // 滚轮倍率
+  dragMinimum: 0,              // 拖拽最小距离
+})
+```
+
+### type 详解
+
+| 值 | 监听 |
+| -- | ---- |
+| `'wheel'` | 滚轮 / 触控板 |
+| `'touch'` | 触屏 |
+| `'pointer'` | 鼠标 / 笔等指针 |
+| `'scroll'` | 容器内滚动 |
+| `'observe'` | IntersectionObserver（元素可见性） |
+
+逗号分隔可监听多个：`'wheel, touch'`。
+
+### tolerance
+
+```tsx
+tolerance: 50
+```
+
+触发 `onUp` / `onDown` 需要累积至少 50 像素的移动量——避免抖动或微小动作误触发。
+
+## 实战：全屏一页一页滑动
+
+```tsx filename="components/Fullpage.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { Observer } from 'gsap/Observer'
+import { useRef, useState } from 'react'
+
+gsap.registerPlugin(Observer)
+
+const PAGES = ['#a1e', '#fbb', '#9cf', '#9f9']
+
+export function Fullpage() {
+  const container = useRef<HTMLDivElement>(null)
+  const [index, setIndex] = useState(0)
+  const animating = useRef(false)
+
+  useGSAP(
+    () => {
+      Observer.create({
+        target: container.current,
+        type: 'wheel, touch',
+        preventDefault: true,
+        onDown: () => {
+          if (animating.current) return
+          setIndex(i => Math.min(PAGES.length - 1, i + 1))
+        },
+        onUp: () => {
+          if (animating.current) return
+          setIndex(i => Math.max(0, i - 1))
+        },
+        tolerance: 50,
+      })
+    },
+    { scope: container }
+  )
+
+  useGSAP(
+    () => {
+      animating.current = true
+      gsap.to('.pages', {
+        yPercent: -100 * index,
+        duration: 0.8,
+        ease: 'power3.inOut',
+        onComplete: () => { animating.current = false },
+      })
+    },
+    { dependencies: [index] }
+  )
+
+  return (
+    <div ref={container} className="h-screen overflow-hidden">
+      <div className="pages">
+        {PAGES.map(color => (
+          <section key={color} className="h-screen" style={{ background: color }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+四屏，向上 / 下滑动 / 滚轮 / 触屏 swipe 都能切——一个 Observer 全搞定。
+
+## 拖拽 + 速度
+
+```tsx
+Observer.create({
+  type: 'pointer',
+  onDrag: (self) => {
+    // self.deltaX / deltaY 是当前帧位移
+    // self.velocityX / velocityY 是速度
+    gsap.set('.box', { x: '+=' + self.deltaX, y: '+=' + self.deltaY })
+  },
+})
+```
+
+也能做拖拽——但**列表拖拽请用 Motion `<Reorder>` 或 dnd-kit**，Observer 太底层。
+
+## kill / enable / disable
+
+```tsx
+const observer = Observer.create({ /* ... */ })
+
+observer.disable()    // 暂时停用
+observer.enable()
+observer.kill()       // 销毁
+```
+
+`useGSAP` 自动 kill——常规场景不用手动。
+
+## 何时不要用
+
+- 需要详细手势识别（双指捏合、旋转、长按） → 用专门的手势库（Hammer.js、use-gesture）
+- 单纯的"滚动到底"或"元素出现" → ScrollTrigger 更合适
+- 列表拖拽 → Motion `<Reorder>`
+- 普通的按钮 / 链接交互 → 原生 onClick / React 事件
+
+Observer 的甜点：**自定义的 swipe / scroll-jacking / 全屏分页**。
+
+## 陷阱
+
+### preventDefault 阻止页面滚动
+
+```tsx
+Observer.create({
+  type: 'wheel, touch',
+  preventDefault: true,   // 滚轮事件被 GSAP 接管，页面不滚了
+})
+```
+
+适合"全屏分页"但不适合"还有其他正常滚动"。按需。
+
+### Observer 内的状态闭包
+
+```tsx
+useGSAP(() => {
+  Observer.create({
+    onUp: () => setIndex(index - 1),  // ❌ 闭包陷阱，index 永远是初始值
+  })
+}, { scope: container })
+```
+
+`useGSAP` 默认依赖空——回调里的 `index` 是首次渲染的值。修复方法：用函数式 setState `setIndex(i => i - 1)`，或加 dependencies。
+
+### 触屏 swipe 与浏览器后退手势冲突
+
+iOS Safari 的左右边缘 swipe 是返回上一页——你的 Observer 会接到一部分手势但浏览器又退了页面。解决：在元素上 CSS `overscroll-behavior-x: contain;`。
+
+## 小结
+
+- Observer 把鼠标 / 触摸 / 滚轮抽象成统一方向（up/down/left/right）+ 速度
+- `tolerance` 决定触发阈值，避免微小动作误触发
+- 经典用途：全屏分页、自定义 swipe、scroll-jacking
+- 列表拖拽 / 手势识别请用专门库
+- 注意闭包陷阱与触屏边缘手势冲突

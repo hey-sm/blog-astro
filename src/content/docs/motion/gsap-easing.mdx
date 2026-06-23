@@ -1,0 +1,286 @@
+---
+title: 缓动深入
+description: GSAP 内置 ease、CustomEase、CustomBounce、CustomWiggle
+---
+
+# 缓动深入
+
+[Tween 基础](/motion/gsap-tween) 已经简单介绍过 `ease`。本章把 GSAP 的全部缓动能力讲透——包括 3.13 中**已免费**的 CustomEase / CustomBounce / CustomWiggle 三个插件。
+
+## ease 是什么
+
+回顾一下：缓动函数描述"动画从 0% 到 100% 的进度曲线"——把 `t`（0~1）映射为 `progress`（也是 0~1）。
+
+- `linear`：`progress = t`，匀速直线
+- `easeOut`：先快后慢，类似汽车进站
+- `easeIn`：先慢后快，类似汽车出发
+
+GSAP 的 ease 比 CSS / Motion 丰富得多——配套有大量预设、可视化工具与自定义曲线插件。
+
+## 内置 ease 速查
+
+GSAP 内置 ease 用字符串名 + 修饰符的语法：
+
+```tsx
+gsap.to('.box', { x: 100, ease: 'power2.out' })
+```
+
+主名（曲线类型）+ `.in` / `.out` / `.inOut`（方向）。
+
+### 幂函数族（最常用）
+
+| 名 | 强度 | 形态 |
+| -- | ---- | ---- |
+| `power1` | 二次 | 轻微 |
+| `power2` | 三次 | 中等（默认） |
+| `power3` | 四次 | 强 |
+| `power4` | 五次 | 戏剧性 |
+
+| 方向 | 形态 |
+| ---- | ---- |
+| `.in` | 先慢后快 |
+| `.out` | 先快后慢（最常用） |
+| `.inOut` | 两头慢、中间快 |
+
+> **零基础口诀**：进场用 `.out`、退场用 `.in`、来回用 `.inOut`。强度选 `power2` 开始。
+
+### 特殊曲线
+
+| ease | 形态 | 适合 |
+| ---- | ---- | ---- |
+| `'none'` / `'linear'` | 匀速 | 进度条、转圈 |
+| `'sine.in/out/inOut'` | 正弦曲线 | 柔和起伏 |
+| `'expo.in/out/inOut'` | 指数 | 戏剧性强减速 |
+| `'circ.in/out/inOut'` | 圆弧 | 更柔和的减速 |
+
+### 趣味曲线
+
+| ease | 行为 | 适合 |
+| ---- | ---- | ---- |
+| `'back.out(1.7)'` | 终点超调再回 | 弹性入场（参数控制超调量） |
+| `'back.in(1.7)'` | 起点超出再走 | 弹性退场 |
+| `'elastic.out(1, 0.3)'` | 橡皮筋多次回弹 | 卡通、玩具感 |
+| `'bounce.out'` | 落地反弹 | 物理感、球类 |
+| `'steps(N)'` | 阶梯（N 段离散） | 像素感、打字机 |
+
+### 默认 ease
+
+GSAP 全局默认 `'power1.out'`——比 CSS 默认 `ease` 更柔和。修改全局默认：
+
+```tsx
+gsap.defaults({ ease: 'power2.out' })
+```
+
+或 timeline 内：
+
+```tsx
+gsap.timeline({ defaults: { ease: 'power3.out' } })
+```
+
+## 可视化工具
+
+记不住名字？官方有 [Ease Visualizer](https://gsap.com/docs/v3/Eases/)——拖动调整、复制配置字符串。开发期常驻一个 tab。
+
+## CustomEase（自定义曲线）
+
+内置 ease 不够用时，用 `CustomEase` 自己画。先注册：
+
+```tsx
+import gsap from 'gsap'
+import { CustomEase } from 'gsap/CustomEase'
+
+gsap.registerPlugin(CustomEase)
+```
+
+### 用 SVG path 定义
+
+```tsx
+CustomEase.create('hop', 'M0,0 C0.14,0 0.27,0.191 0.3,0.4 0.33,0.6 0.46,0.8 1,1')
+
+gsap.to('.ball', { y: 200, duration: 1.5, ease: 'hop' })
+```
+
+字符串是 SVG 路径——`M0,0` 起点 `1,1` 终点，中间用 cubic bezier 控制点描述曲线。
+
+### 用 cubic-bezier 定义
+
+更易上手——和 CSS `cubic-bezier(x1, y1, x2, y2)` 一致：
+
+```tsx
+CustomEase.create('outExpo', '0.16, 1, 0.3, 1')
+
+gsap.to('.box', { x: 100, ease: 'outExpo' })
+```
+
+可以在 [cubic-bezier.com](https://cubic-bezier.com) 拖曲线生成参数。
+
+### 与 Motion 等价物
+
+Motion 的数组 ease `[0.16, 1, 0.3, 1]` 在 GSAP 里就是上面的 CustomEase 形式——一一对应。
+
+## CustomBounce（自定义弹跳）
+
+`'bounce.out'` 是固定形态。`CustomBounce` 允许调整弹跳强度、间隔、终点位置：
+
+```tsx
+import { CustomEase } from 'gsap/CustomEase'
+import { CustomBounce } from 'gsap/CustomBounce'
+
+gsap.registerPlugin(CustomEase, CustomBounce)
+
+CustomBounce.create('myBounce', {
+  strength: 0.7,    // 0~1，弹跳强度
+  squash: 3,        // 弹跳次数
+  squashID: 'mySquash',  // 配套挤压形变 ease
+})
+
+// 主弹跳
+gsap.to('.ball', { y: 300, duration: 2, ease: 'myBounce' })
+
+// 挤压形变（落地时压扁）
+gsap.to('.ball', { scaleY: 0.6, scaleX: 1.4, duration: 2, ease: 'mySquash' })
+```
+
+`squashID` 自动生成一个**配套的形变 ease**——落地时用它做"压扁 → 恢复"的形变，配合主弹跳实现真实的"小球落地"效果。
+
+## CustomWiggle（自定义抖动）
+
+抖动 / 摆动效果。常用于按钮抖动提示、错误反馈：
+
+```tsx
+import { CustomWiggle } from 'gsap/CustomWiggle'
+
+gsap.registerPlugin(CustomEase, CustomWiggle)
+
+CustomWiggle.create('myWiggle', { wiggles: 6, type: 'easeOut' })
+
+gsap.fromTo('.input',
+  { rotation: -3 },
+  { rotation: 3, duration: 0.6, ease: 'myWiggle' }
+)
+```
+
+| 配置 | 含义 |
+| ---- | ---- |
+| `wiggles` | 抖动次数 |
+| `type` | `'easeOut'`（逐渐减弱）/ `'easeInOut'`（先弱后弱中间强）/ `'anticipate'`（先反向）/ `'random'` 等 |
+
+适合**短促错误提示**——表单字段写错后抖一下、按钮无法点击时摇一下。
+
+## RoughEase（不规则抖动）
+
+字面意思——粗糙、随机抖动。模拟手抖、地震、电子干扰：
+
+```tsx
+import { RoughEase } from 'gsap/EasePack'
+
+gsap.registerPlugin(RoughEase)
+
+gsap.to('.box', {
+  x: 100,
+  duration: 2,
+  ease: 'rough({ points: 30, randomize: true, strength: 1.5 })',
+})
+```
+
+不常用——但需要"地震感"或"低保真"动画时是首选。
+
+## SlowMo（慢动作）
+
+中段慢、两头快——电影里的慢动作回放：
+
+```tsx
+import { SlowMo } from 'gsap/EasePack'
+gsap.registerPlugin(SlowMo)
+
+gsap.to('.box', {
+  x: 300,
+  duration: 3,
+  ease: 'slow(0.7, 0.7, false)',
+})
+```
+
+参数 `(linearRatio, power, yoyoMode)`：
+
+- `linearRatio`：中段慢速比例
+- `power`：两端加速度
+- `yoyoMode`：是否前慢中快后慢
+
+适合"戏剧性减速"效果——VIP 揭晓、按钮强调。
+
+## ExpoScaleEase（指数缩放）
+
+针对 scale 动画专门优化——避免常规 ease 在 scale 上的视觉异常（中段看起来停滞）：
+
+```tsx
+import { ExpoScaleEase } from 'gsap/EasePack'
+gsap.registerPlugin(ExpoScaleEase)
+
+gsap.to('.box', {
+  scale: 5,
+  duration: 1.5,
+  ease: 'expoScale(1, 5, power2.out)',
+})
+```
+
+参数：`(startScale, endScale, baseEase)`。普通 ease 做大幅 scale 动画会"卡帧感"，这个 ease 解决了。
+
+## 在 React 中使用
+
+```tsx filename="components/BounceBall.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { CustomEase } from 'gsap/CustomEase'
+import { CustomBounce } from 'gsap/CustomBounce'
+import { useRef } from 'react'
+
+gsap.registerPlugin(CustomEase, CustomBounce)
+
+CustomBounce.create('ball', { strength: 0.7, squash: 3, squashID: 'ballSquash' })
+
+export function BounceBall() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.timeline()
+        .to('.ball', { y: 300, duration: 1.5, ease: 'ball' })
+        .to('.ball', { scaleY: 0.6, scaleX: 1.4, duration: 1.5, ease: 'ballSquash' }, '<')
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container} className="relative h-96">
+      <div className="ball absolute size-12 rounded-full bg-red-500" />
+    </div>
+  )
+}
+```
+
+主弹跳 + 形变同时跑（`'<'`），落地视觉真实。
+
+## 何时选哪种 ease
+
+| 需求 | 推荐 |
+| ---- | ---- |
+| 一般 UI 进场 | `'power2.out'` |
+| 一般 UI 退场 | `'power2.in'` |
+| 来回切换 | `'power2.inOut'` |
+| 弹性进场（按钮出现） | `'back.out(1.7)'` |
+| 卡通弹簧 | `'elastic.out(1, 0.3)'` |
+| 落地反弹 | `'bounce.out'` |
+| 物理球（更真实） | `CustomBounce` |
+| 错误抖动 | `CustomWiggle` |
+| 戏剧性慢动作 | `SlowMo` |
+| 大幅缩放 | `ExpoScaleEase` |
+| 复刻设计稿曲线 | `CustomEase`（cubic-bezier） |
+
+## 小结
+
+- GSAP 内置 ease 用 "主名.方向" 格式：`power2.out`
+- 默认 `'power1.out'`——比 CSS 更柔和
+- 趣味 ease：`back` / `elastic` / `bounce`——一行 ease 就有"灵魂"
+- 高级插件 3.13 全免费：CustomEase / CustomBounce / CustomWiggle / SlowMo / RoughEase / ExpoScaleEase
+- 自定义曲线推荐用 cubic-bezier 字符串——和 CSS / Motion 互通
+- 用 [Ease Visualizer](https://gsap.com/docs/v3/Eases/) 边调边复制配置

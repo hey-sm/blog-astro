@@ -1,0 +1,396 @@
+---
+title: Motion Values 进阶
+description: useMotionValue / useTransform / useSpring / useVelocity / useMotionTemplate——绕开 React 渲染的高性能动画
+---
+
+# Motion Values 进阶
+
+到目前为止我们写的动画都是**声明式**的——给 `animate` 一个目标值，Motion 自己插值。但有些场景需要**实时读写**动画当前值：
+
+- 让滚动进度驱动元素旋转
+- 拖拽时根据 X 位置动态改变颜色
+- 鼠标位置实时映射到 3D 倾斜
+- 把动画值传给非 Motion 组件（比如 `<canvas>`）
+
+这就是 **Motion Value** 登场的地方。它是 Motion 库中**绕开 React 渲染**的状态容器——值变化不会触发组件 re-render，性能极高。
+
+> 零基础速记：Motion Value 类似 React 的 `useRef`——存值不刷新组件，但 Motion 会自动把它绑到 DOM 样式上。
+
+## 核心 API 一览
+
+| API | 作用 | 类比 |
+| --- | ---- | ---- |
+| `useMotionValue(initial)` | 创建一个可变值 | `useRef` 的"动画版" |
+| `useTransform(input, ...)` | 输入值映射到输出值 | 数学函数 `f(x)` |
+| `useSpring(source)` | 给值套上弹簧物理 | 缓动包装器 |
+| `useVelocity(source)` | 读取值的变化速度 | 求导 |
+| `useMotionTemplate` | 把多个值拼成字符串 | 模板字符串 |
+| `useMotionValueEvent` | 监听值的变化 | `useEffect` 但不触发渲染 |
+
+## useMotionValue 基础
+
+```tsx filename="components/Box.tsx"
+import { motion, useMotionValue } from 'motion/react'
+import { useEffect } from 'react'
+
+function Box() {
+  const x = useMotionValue(0)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      x.set(x.get() + 10)
+    }, 100)
+    return () => clearInterval(id)
+  }, [x])
+
+  return <motion.div style={{ x }} />
+}
+```
+
+关键点：
+
+- `x.get()` 读取当前值
+- `x.set(newValue)` 设置新值
+- 把 motion value 传给 `style`，Motion 自动绑到 DOM
+- **不会触发组件重渲染**——`x` 变化只更新 DOM 的 transform
+
+### 为什么不用 `useState`
+
+```tsx
+// ❌ 慢——每次值变化整个组件 re-render
+const [x, setX] = useState(0)
+useEffect(() => {
+  const id = setInterval(() => setX(prev => prev + 10), 16)
+  return () => clearInterval(id)
+}, [])
+
+// ✅ 快——只更新 DOM 样式，组件零渲染
+const x = useMotionValue(0)
+useEffect(() => {
+  const id = setInterval(() => x.set(x.get() + 10), 16)
+  return () => clearInterval(id)
+}, [x])
+```
+
+每秒 60 次的动画用 `useState` 等于每秒 60 次组件重渲染——大型应用直接卡爆。
+
+## useTransform 映射
+
+最常用的 motion value 工具——把一个值**实时映射**到另一个值。
+
+### 数值范围映射
+
+```tsx filename="components/Slider.tsx"
+import { motion, useMotionValue, useTransform } from 'motion/react'
+
+function Slider() {
+  const x = useMotionValue(0)
+
+  // x 从 0 到 300 时，opacity 从 1 降到 0
+  const opacity = useTransform(x, [0, 300], [1, 0])
+
+  // x 从 0 到 300 时，背景色从蓝变红
+  const background = useTransform(
+    x,
+    [0, 300],
+    ['#3b82f6', '#ef4444']
+  )
+
+  return (
+    <motion.div
+      drag="x"
+      dragConstraints={{ left: 0, right: 300 }}
+      style={{ x, opacity, background }}
+      className="size-20 rounded"
+    />
+  )
+}
+```
+
+`useTransform(input, inputRange, outputRange)`：
+
+- 第二个参数：输入的"刻度"
+- 第三个参数：输出的"刻度"
+- 自动线性插值
+- 字符串、颜色、CSS 单位都能插值
+
+### 函数形式
+
+```tsx
+const rotate = useTransform(x, value => value * 0.5)
+const opacity = useTransform([x, y], ([latestX, latestY]) => {
+  const distance = Math.sqrt(latestX ** 2 + latestY ** 2)
+  return Math.max(0, 1 - distance / 200)
+})
+```
+
+支持多输入——传数组进去，回调收到所有当前值。
+
+### 常见配方
+
+```tsx
+// 拖动方向决定颜色
+const color = useTransform(x, [-100, 0, 100], ['#ef4444', '#3b82f6', '#10b981'])
+
+// 滚动进度 → 进度条宽度
+const width = useTransform(scrollY, [0, 1000], ['0%', '100%'])
+
+// 鼠标 X → 视差偏移
+const parallaxX = useTransform(mouseX, [0, 1000], [-50, 50])
+
+// 时间值 → 旋转
+const rotate = useTransform(time, latest => latest / 10)
+```
+
+## useSpring 弹簧包装
+
+`useTransform` 的输出是**线性**的——直接跟随输入。如果想让输出"软软地"跟上输入：
+
+```tsx filename="components/SmoothFollower.tsx"
+import { motion, useMotionValue, useSpring } from 'motion/react'
+import { useEffect } from 'react'
+
+function SmoothFollower() {
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+
+  // 套上弹簧——值会延迟、回弹地跟随
+  const x = useSpring(mouseX, { stiffness: 200, damping: 20 })
+  const y = useSpring(mouseY, { stiffness: 200, damping: 20 })
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      mouseX.set(e.clientX)
+      mouseY.set(e.clientY)
+    }
+    window.addEventListener('mousemove', handler)
+    return () => window.removeEventListener('mousemove', handler)
+  }, [mouseX, mouseY])
+
+  return <motion.div style={{ x, y }} className="size-10 rounded-full bg-blue-500" />
+}
+```
+
+效果：自定义鼠标光标——不是死板地跟在指针上，而是像有惯性的弹簧。
+
+### 链式包装
+
+```tsx
+const raw = useMotionValue(0)
+const smoothed = useSpring(raw, { stiffness: 100 })
+const mapped = useTransform(smoothed, [0, 1], ['0%', '100%'])
+```
+
+**raw → spring → transform** 是常见组合：原始输入先平滑，再映射到样式。
+
+## useVelocity 速度
+
+读取一个 motion value 的"变化速度"（导数）：
+
+```tsx filename="components/SkewOnScroll.tsx"
+import { motion, useScroll, useVelocity, useTransform, useSpring } from 'motion/react'
+
+function SkewOnScroll({ children }: { children: React.ReactNode }) {
+  const { scrollY } = useScroll()
+  const velocity = useVelocity(scrollY)
+  const smoothVelocity = useSpring(velocity, { stiffness: 100, damping: 30 })
+  const skew = useTransform(smoothVelocity, [-3000, 3000], [-15, 15])
+
+  return <motion.div style={{ skewY: skew }}>{children}</motion.div>
+}
+```
+
+效果：滚动越快，元素倾斜越明显——快速翻页时的动感效果。
+
+## useMotionTemplate 字符串拼接
+
+CSS 经常需要把多个值拼成字符串（`linear-gradient(...)`、`rgba(...)`、`drop-shadow(...)`）：
+
+```tsx filename="components/Glow.tsx"
+import { motion, useMotionValue, useMotionTemplate } from 'motion/react'
+
+function Glow() {
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+
+  const background = useMotionTemplate`
+    radial-gradient(
+      circle at ${mouseX}px ${mouseY}px,
+      rgba(59, 130, 246, 0.3),
+      transparent 40%
+    )
+  `
+
+  return (
+    <motion.div
+      onMouseMove={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        mouseX.set(e.clientX - rect.left)
+        mouseY.set(e.clientY - rect.top)
+      }}
+      style={{ background }}
+      className="h-96 w-full"
+    />
+  )
+}
+```
+
+效果：跟随鼠标的"聚光灯"光晕——常见于卡片 hover 高亮。
+
+`useMotionTemplate` 是带 motion value 占位符的**模板字符串标签**——就像 styled-components 的语法。
+
+## useMotionValueEvent 监听
+
+值变化时执行副作用，但**不触发组件渲染**：
+
+```tsx filename="components/ScrollLogger.tsx"
+import { motion, useScroll, useMotionValueEvent } from 'motion/react'
+import { useState } from 'react'
+
+function ScrollLogger() {
+  const { scrollY } = useScroll()
+  const [isAtTop, setIsAtTop] = useState(true)
+
+  useMotionValueEvent(scrollY, 'change', (latest) => {
+    setIsAtTop(latest < 50)
+  })
+
+  return <header className={isAtTop ? '' : 'shadow-lg'}>...</header>
+}
+```
+
+支持的事件：
+
+- `'change'`：值变化
+- `'animationStart'` / `'animationComplete'` / `'animationCancel'`：动画生命周期
+
+> 陷阱：在 `change` 回调里调用 `setState` 会触发渲染——只在真正需要时调用，避免每帧都 setState。
+
+## 实战配方
+
+### 3D 卡片倾斜
+
+```tsx filename="components/TiltCard.tsx"
+import { motion, useMotionValue, useTransform, useSpring } from 'motion/react'
+
+function TiltCard() {
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+
+  const rotateX = useSpring(useTransform(y, [-0.5, 0.5], [10, -10]))
+  const rotateY = useSpring(useTransform(x, [-0.5, 0.5], [-10, 10]))
+
+  return (
+    <motion.div
+      onMouseMove={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        x.set((e.clientX - rect.left) / rect.width - 0.5)
+        y.set((e.clientY - rect.top) / rect.height - 0.5)
+      }}
+      onMouseLeave={() => {
+        x.set(0)
+        y.set(0)
+      }}
+      style={{ rotateX, rotateY, transformStyle: 'preserve-3d' }}
+      className="size-64 rounded-xl bg-blue-500"
+    />
+  )
+}
+```
+
+### 进度条
+
+```tsx filename="components/ScrollProgress.tsx"
+import { motion, useScroll, useSpring } from 'motion/react'
+
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll()
+  const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30 })
+
+  return (
+    <motion.div
+      className="fixed top-0 left-0 right-0 h-1 origin-left bg-blue-500"
+      style={{ scaleX }}
+    />
+  )
+}
+```
+
+`scrollYProgress` 是 0 到 1 的进度值——直接绑给 `scaleX` 就是进度条。
+
+### 拖拽返回原位
+
+```tsx filename="components/SnapBack.tsx"
+import { motion, useMotionValue, useSpring, useTransform } from 'motion/react'
+
+function SnapBack() {
+  const x = useMotionValue(0)
+  const opacity = useTransform(x, [-200, 0, 200], [0.3, 1, 0.3])
+  const scale = useTransform(x, [-200, 0, 200], [0.8, 1, 0.8])
+
+  return (
+    <motion.div
+      drag="x"
+      dragSnapToOrigin
+      style={{ x, opacity, scale }}
+      className="size-32 rounded-xl bg-blue-500"
+    />
+  )
+}
+```
+
+拖动越远，越淡越小——但松手会回到原位。
+
+## 陷阱
+
+### 不要把 motion value 当 state 用
+
+```tsx
+// ❌ 想用 motion value 控制条件渲染
+const x = useMotionValue(0)
+return x.get() > 100 ? <A /> : <B />  // 永远不更新——组件不渲染
+
+// ✅ 用 useMotionValueEvent 转成 state
+const [showA, setShowA] = useState(false)
+useMotionValueEvent(x, 'change', latest => setShowA(latest > 100))
+return showA ? <A /> : <B />
+```
+
+motion value 的核心是"绕过渲染"——想触发渲染请显式转 state。
+
+### useTransform 输入要在范围内
+
+```tsx
+// ❌ 输入超出范围时，输出会延伸
+const opacity = useTransform(x, [0, 100], [1, 0])
+// x = 200 时 opacity = -1（继续线性）
+
+// ✅ 用 clamp（默认开启）或显式限制
+const opacity = useTransform(x, [0, 100], [1, 0], { clamp: true })
+```
+
+新版本 `clamp` 默认 `true`——输出被限制在 outputRange 内。如果想要"超出后继续延伸"显式传 `clamp: false`。
+
+### 直接用对象会失效
+
+```tsx
+// ❌ 每次渲染创建新对象，spring 配置失效
+<motion.div style={{ x: useSpring(0, { stiffness: 100 }) }} />
+
+// ✅ 把 spring 配置提取出来
+const x = useSpring(0, { stiffness: 100 })
+return <motion.div style={{ x }} />
+```
+
+Hooks 永远不能放进 `style` 对象内部——这是 React 规则，不是 Motion 限制。
+
+## 小结
+
+- Motion Value 是**绕过 React 渲染**的状态容器——高频动画的性能基石
+- `useMotionValue` 创建，`useTransform` 映射，`useSpring` 平滑
+- `useTransform` 的输入输出范围支持数字、字符串、颜色，自动插值
+- `useMotionTemplate` 把多个值拼成 CSS 字符串（渐变、阴影）
+- `useMotionValueEvent` 监听变化但不触发渲染，需要时再转 state
+- 实战中**raw → spring → transform** 是最常见的组合链
+
+下一章 [useAnimate 命令式](/motion/motion-use-animate) 介绍另一种动画方式——不绑定到组件 prop，而是用代码主动播放。

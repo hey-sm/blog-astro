@@ -1,0 +1,194 @@
+---
+title: 你需要先知道的
+description: 学习 Motion 与 GSAP 前的 CSS、JavaScript、React 基础速通
+---
+
+# 你需要先知道的
+
+这一章面向零基础读者。如果你已经写过几个动画，可以快速浏览跳到下一章；如果你刚接触前端动画，请认真读完——后续所有 API 都建立在这些基础之上。
+
+## 你必须理解的 4 个 CSS 概念
+
+### 1. `transform`：让元素"动"起来的关键
+
+`transform` 是浏览器最廉价的视觉变换——平移、旋转、缩放、倾斜——**它不会触发布局重排**。
+
+```css
+.box {
+  transform: translateX(100px) rotate(45deg) scale(1.2);
+}
+```
+
+| 函数 | 作用 |
+| ---- | ---- |
+| `translateX / Y / Z` | 位移 |
+| `rotate` / `rotateX / Y` | 旋转 |
+| `scale` / `scaleX / Y` | 缩放 |
+| `skew` | 倾斜 |
+
+**为什么动画必须用 `transform`**：浏览器把它交给 GPU 处理，不会重新计算布局。后面的"合成层"会展开讲。
+
+### 2. `transition`：CSS 的"自动补间"
+
+`transition` 让一个属性在变化时**自动过渡**，而不是瞬间切换。
+
+```css
+.button {
+  background: blue;
+  transition: background 0.3s ease-out;
+}
+
+.button:hover {
+  background: red;
+  /* 从 blue 到 red 自动过渡 0.3s */
+}
+```
+
+`transition` 的四个参数：
+
+```css
+transition: <property> <duration> <timing-function> <delay>;
+/*           过渡哪个属性  时长       缓动曲线         延迟  */
+```
+
+### 3. `@keyframes`：多步骤动画
+
+`transition` 只能定义"从 A 到 B"。复杂动画需要 `@keyframes`：
+
+```css
+@keyframes bounce {
+  0%   { transform: translateY(0); }
+  50%  { transform: translateY(-30px); }
+  100% { transform: translateY(0); }
+}
+
+.ball {
+  animation: bounce 1s ease-in-out infinite;
+}
+```
+
+### 4. 缓动函数（Easing）
+
+动画很少匀速——现实世界的物体有加速、减速、回弹。缓动函数描述这种节奏：
+
+| 名字 | 视觉效果 |
+| ---- | -------- |
+| `linear` | 匀速（机械感） |
+| `ease-out` | 先快后慢（自然，最常用） |
+| `ease-in` | 先慢后快（适合离开屏幕） |
+| `ease-in-out` | 慢-快-慢（柔和） |
+| `cubic-bezier(...)` | 自定义曲线 |
+
+零基础时记住一句话：**进场用 `ease-out`，退场用 `ease-in`**。
+
+## JavaScript 侧的两个基础
+
+### `requestAnimationFrame`
+
+浏览器告诉 JS "下一帧准备绘制了，你有什么要更新的"。`requestAnimationFrame`（简称 rAF）是每秒 60 次的"动画心跳"。
+
+```js
+function loop() {
+  // 更新位置、属性
+  box.style.transform = `translateX(${x++}px)`
+  requestAnimationFrame(loop)  // 注册下一帧
+}
+requestAnimationFrame(loop)
+```
+
+Motion 和 GSAP 内部都基于 rAF。**你不需要手写 rAF**，但要理解："动画的 60fps" 就是 rAF 每秒 60 次回调。
+
+### Web Animations API（WAAPI）
+
+浏览器原生的动画 API，介于 CSS 与 JS 之间：
+
+```js
+element.animate(
+  [{ opacity: 0 }, { opacity: 1 }],
+  { duration: 300, easing: 'ease-out' }
+)
+```
+
+Motion 的最新版底层就大量使用 WAAPI。**你不会直接写它**，但知道它存在能帮你理解 Motion 的"混合引擎"为什么快。
+
+## React 侧的三个基础
+
+### `useState`：状态触发重渲染
+
+动画往往由"状态变化"驱动——`isOpen` 从 `false` 变 `true`，弹窗就该出现。
+
+```tsx
+const [isOpen, setIsOpen] = useState(false)
+return <Modal open={isOpen} onClose={() => setIsOpen(false)} />
+```
+
+### `useRef`：拿到 DOM 元素
+
+GSAP 需要直接操作 DOM 元素，必须通过 `ref`：
+
+```tsx
+import { useRef } from 'react'
+
+function Box() {
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  // boxRef.current 就是真实 DOM 元素
+  return <div ref={boxRef}>...</div>
+}
+```
+
+零基础注意点：
+
+- `useRef` 不会触发重渲染——它是"逃生舱"
+- `ref.current` 在组件挂载前是 `null`，访问时要先判空
+- 传给 JSX 的 `ref={xxx}` 由 React 自动填入
+
+### `useEffect`：组件挂载后做事
+
+DOM 元素只有在挂载后才存在，所以"操作 DOM" 必须在 `useEffect` 里：
+
+```tsx
+useEffect(() => {
+  if (!boxRef.current) return
+  // 安全地操作 DOM
+}, [])  // 空依赖：仅在挂载时运行一次
+```
+
+`useEffect` 的依赖数组决定"什么时候重新运行"——空数组只运行一次，依赖某个变量则该变量变化时重跑。
+
+### 进阶：StrictMode 双调用
+
+React 开发模式（`<StrictMode>`）会故意把 `useEffect` 调用两次，用来暴露副作用清理问题。这会让 GSAP 动画"播放两次"——后面 GSAP 章节会专门讲怎么应对（用 `useGSAP`）。
+
+## 一张概念地图
+
+```
+CSS 层：transform / transition / @keyframes / 缓动
+  ↑
+WAAPI 层：浏览器原生动画 API
+  ↑
+JS 引擎层：rAF 驱动的动画库（Motion / GSAP）
+  ↑
+React 层：状态、ref、副作用驱动动画
+```
+
+每一层都是上一层的封装。理解这个层次，能让你看懂任何动画 API 的设计动机。
+
+## 自检
+
+继续学习前，确认你能回答：
+
+- 为什么动画推荐用 `transform`，而不是改 `top` / `left`？
+- `transition` 和 `@keyframes` 的区别？
+- React 里"拿到 DOM 元素"用什么 Hook？
+- 为什么操作 DOM 必须在 `useEffect` 里？
+
+答得上来——下一章可以放心开始。答不上来——回到上面找答案再走。
+
+## 小结
+
+- `transform` + `opacity` 是性能最好的动画属性
+- `transition` 处理简单的 A→B 过渡，`@keyframes` 处理多步骤
+- 进场 `ease-out`、退场 `ease-in` 是默认值
+- 动画的"心跳"是 `requestAnimationFrame`
+- React 操作 DOM 用 `useRef` + `useEffect`

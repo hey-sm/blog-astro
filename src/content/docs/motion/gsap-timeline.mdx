@@ -1,0 +1,294 @@
+---
+title: Timeline 编排
+description: gsap.timeline、链式、相对位置参数、labels、嵌套 timeline
+---
+
+# Timeline 编排
+
+`gsap.to` / `gsap.from` 只能写**单个动画**——多个动画想精确编排时序，得用 **Timeline**。
+
+Timeline 是 GSAP 与其他动画库的最大差异——一条时间轴上**任意数量的 tween 按顺序、并行、或相对位置排布**，整体作为单元可以 pause / reverse / 跳进度。
+
+## 第一条 timeline
+
+```tsx
+import gsap from 'gsap'
+
+const tl = gsap.timeline()
+
+tl.to('.a', { x: 100, duration: 0.5 })
+tl.to('.b', { x: 100, duration: 0.5 })
+tl.to('.c', { x: 100, duration: 0.5 })
+```
+
+依次播放——`.a` → `.b` → `.c`，总时长 1.5 秒。每个 tween 等前一个**完成后**开始。
+
+### 链式调用
+
+```tsx
+gsap.timeline()
+  .to('.a', { x: 100, duration: 0.5 })
+  .to('.b', { x: 100, duration: 0.5 })
+  .to('.c', { x: 100, duration: 0.5 })
+```
+
+链式更紧凑——所有 timeline 方法都返回 timeline 自身。
+
+## 位置参数（Position Parameter）
+
+Timeline 的核心是 **position parameter**——`.to()` 的第三个参数，控制"这个 tween 何时开始"。
+
+```tsx
+tl.to('.a', { x: 100, duration: 0.5 })
+  .to('.b', { x: 100, duration: 0.5 }, position)  // <-- 位置参数
+```
+
+| 位置参数 | 含义 |
+| -------- | ---- |
+| 不写 | 紧接上一个 tween 之后 |
+| 数字 `0.5` | 绝对时间，从 timeline 0.5s 开始 |
+| `'+=0.3'` | 上一个 tween 结束后**再延后** 0.3s |
+| `'-=0.3'` | 上一个 tween 结束前**提前** 0.3s |
+| `'<'` | 与上一个 tween **同时**开始 |
+| `'<0.2'` | 上一个 tween 开始 0.2s 后 |
+| `'>'` | 上一个 tween 结束时（与不写等价） |
+| `'<+0.5'` | 上一个 tween 开始的 0.5s 后 |
+| `'label'` | 跳到名为 label 的位置 |
+
+### 实例
+
+```tsx
+gsap.timeline()
+  .to('.a', { x: 100, duration: 1 })                // 0s ~ 1s
+  .to('.b', { x: 100, duration: 1 }, '-=0.5')       // 0.5s ~ 1.5s（重叠 0.5s）
+  .to('.c', { x: 100, duration: 1 }, '<')           // 0.5s ~ 1.5s（与 .b 同步）
+  .to('.d', { x: 100, duration: 1 }, '+=0.2')       // 1.7s ~ 2.7s（在最后一个 tween 之后等 0.2s）
+```
+
+灵活到能编排任何节奏。
+
+### `<` 的"同时"是相对最近 tween
+
+```tsx
+tl.to('.a', { x: 100 })       // 0 ~ 0.5
+  .to('.b', { x: 100 }, '<')  // 与 .a 同时
+  .to('.c', { x: 100 }, '<')  // 与 .b 同时（同步意思一样）
+```
+
+## Labels（命名时间点）
+
+时间轴上可以打**标签**，后面引用：
+
+```tsx
+const tl = gsap.timeline()
+
+tl.addLabel('intro')
+  .to('.title', { y: 0, opacity: 1, duration: 0.5 })
+  .addLabel('content', '+=0.3')
+  .to('.body', { y: 0, opacity: 1, duration: 0.5 })
+  .addLabel('cta')
+  .to('.btn', { scale: 1, duration: 0.4 }, 'cta+=0.2')
+
+// 跳到 label
+tl.seek('content')
+tl.play('intro')
+```
+
+Labels 让长 timeline 可读——读代码的人不用心算"0.8 秒是哪个阶段"，直接看 label 名字。
+
+## 嵌套 timeline
+
+一个 timeline 可以放进另一个 timeline——天然的"动画模块化"：
+
+```tsx
+function createIntro() {
+  const tl = gsap.timeline()
+  tl.from('.title', { y: 50, opacity: 0, duration: 0.6 })
+    .from('.subtitle', { y: 20, opacity: 0, duration: 0.4 }, '-=0.2')
+  return tl
+}
+
+function createContent() {
+  return gsap.timeline()
+    .from('.card', { scale: 0.8, opacity: 0, duration: 0.5, stagger: 0.1 })
+}
+
+const master = gsap.timeline()
+master.add(createIntro())
+       .add(createContent(), '+=0.3')
+```
+
+`master.add(子 timeline)` 会把子 timeline 嵌入主 timeline 当前位置。整个 master 控制时仍是一个单元。
+
+## defaults：共享配置
+
+子 tween 重复写 `duration: 0.5, ease: 'power2.out'` 麻烦？给 timeline 配 `defaults`：
+
+```tsx
+const tl = gsap.timeline({
+  defaults: { duration: 0.5, ease: 'power2.out' },
+})
+
+tl.from('.a', { y: 30 })       // 自动用 duration: 0.5
+  .from('.b', { y: 30 })
+  .from('.c', { y: 30 })
+```
+
+被子 tween 显式指定的属性会覆盖 defaults。
+
+## 控制 timeline
+
+```tsx
+const tl = gsap.timeline()
+
+tl.play()
+tl.pause()
+tl.reverse()         // 反向播放
+tl.restart()
+tl.seek(2)           // 跳到 2s
+tl.seek('intro')     // 跳到 label
+tl.timeScale(0.5)    // 0.5 倍速
+tl.totalDuration()   // 读取总时长
+tl.progress()        // 0~1 当前进度
+tl.progress(0.5)     // 设置进度跳到一半
+
+tl.kill()            // 销毁
+```
+
+Timeline 控制是**一致**的——pause 时整个时间轴所有动画都停，play 时所有都恢复。
+
+## 配合 React 状态
+
+```tsx filename="components/Hero.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { useRef, useState } from 'react'
+
+export function Hero() {
+  const container = useRef<HTMLDivElement>(null)
+  const tlRef = useRef<gsap.core.Timeline | null>(null)
+
+  useGSAP(
+    () => {
+      tlRef.current = gsap.timeline({ paused: true })
+      tlRef.current
+        .from('.title', { y: 30, opacity: 0, duration: 0.6 })
+        .from('.subtitle', { y: 20, opacity: 0, duration: 0.4 }, '-=0.2')
+        .from('.btn', { scale: 0, duration: 0.3 }, '+=0.1')
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container}>
+      <h1 className="title">Title</h1>
+      <p className="subtitle">Subtitle</p>
+      <button className="btn">Start</button>
+
+      <button onClick={() => tlRef.current?.play()}>播放</button>
+      <button onClick={() => tlRef.current?.reverse()}>倒放</button>
+    </div>
+  )
+}
+```
+
+关键点：
+
+- `paused: true` 创建后不自动播放
+- 用 `tlRef` 保存引用，React 事件回调里 play / reverse / seek
+- 注意 `tlRef.current?` 处理 SSR 与 strictMode 情况
+
+## 完整示例：欢迎序列
+
+```tsx filename="components/WelcomeSequence.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { useRef } from 'react'
+
+export function WelcomeSequence() {
+  const container = useRef<HTMLElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.timeline({ defaults: { duration: 0.6, ease: 'power3.out' } })
+        .from('.logo', { scale: 0, rotation: -180, ease: 'back.out(2)' })
+        .from('.title', { y: 40, opacity: 0 }, '-=0.3')
+        .from('.subtitle', { y: 20, opacity: 0 }, '-=0.4')
+        .from('.card', { y: 30, opacity: 0, stagger: 0.1 }, '+=0.2')
+        .from('.btn', { scale: 0, ease: 'back.out(1.7)' }, '<+0.5')
+    },
+    { scope: container }
+  )
+
+  return (
+    <section ref={container}>
+      <div className="logo">★</div>
+      <h1 className="title">Welcome</h1>
+      <p className="subtitle">Get started in seconds</p>
+      <div className="card">Feature 1</div>
+      <div className="card">Feature 2</div>
+      <div className="card">Feature 3</div>
+      <button className="btn">Sign up</button>
+    </section>
+  )
+}
+```
+
+整段 timeline 一目了然——读代码就能想象出动画节奏。
+
+## 陷阱
+
+### 闭包陷阱
+
+```tsx
+useGSAP(() => {
+  const tl = gsap.timeline()
+  setTimeout(() => {
+    tl.to('.box', { x: 100 })  // tl 在 useGSAP 外执行？
+  }, 1000)
+}, { scope: container })
+```
+
+`useGSAP` 结束时收集所有已创建的 tween / timeline。延迟创建的 tween 不会被收集——卸载时不清理。**全部动画必须在 callback 同步执行内创建**，要异步触发就用 `contextSafe`。
+
+### 嵌套 timeline 的 defaults 不继承
+
+```tsx
+const master = gsap.timeline({ defaults: { duration: 1 } })
+const child = gsap.timeline()
+child.from('.x', { y: 30 })   // ❌ 没继承 duration: 1，用 GSAP 默认 0.5
+master.add(child)
+```
+
+子 timeline 不会继承父 timeline 的 defaults——要么子也自己声明 defaults，要么直接用 master 写所有 tween。
+
+### `kill()` vs `revert()`
+
+| 方法 | 行为 |
+| ---- | ---- |
+| `.kill()` | 销毁 timeline，停止动画 |
+| `.revert()` | 销毁并**还原 DOM 样式到动画前** |
+
+React 卸载时 `useGSAP` 自动调用 `revert` ——元素回到 CSS 原样。如果你想动画结束后保留终点状态，避免 revert：在 `useGSAP` 选项里设 `revertOnUpdate: false`，但通常默认行为就是对的。
+
+## 与 Motion 的对比
+
+| 场景 | Motion | GSAP |
+| ---- | ------ | ---- |
+| 简单进出场 | `motion.div` + `initial/animate` | `gsap.from` |
+| 列表错峰 | Variants + `staggerChildren` | `stagger` 参数 |
+| 序列编排 | 嵌套 variants 较费力 | ⭐ Timeline 一行一行写 |
+| 标签跳转 | 不支持 | ⭐ `addLabel` + `seek('label')` |
+| 反向播放 | 限于 `whileHover` 等 | ⭐ `.reverse()` 任意触发 |
+
+时间轴编排能力是 GSAP 的"杀手锏"。Motion 也有 `useAnimate` 的序列数组（[见此](/motion/motion-use-animate)），但功能性远不如 timeline。
+
+## 小结
+
+- Timeline = 一条时间轴 + 多个 tween 的编排
+- **位置参数**（`'-=0.3'` / `'<'` / `'+=0.2'`）是 timeline 的灵魂——掌握它就掌握 GSAP
+- `defaults` 减少子 tween 重复配置
+- 用 labels 命名时间点，让长 timeline 可读
+- 嵌套 timeline 实现动画模块化
+- 用 `tlRef` 保存引用，React 事件可控制播放 / 倒放 / 跳进度
+- `useGSAP` 内必须**同步**创建所有动画，异步触发用 `contextSafe`

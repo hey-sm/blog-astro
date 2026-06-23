@@ -1,0 +1,336 @@
+---
+title: Tween 基础
+description: gsap.to / from / fromTo / set，目标语法、stagger、CSS Variable 目标
+---
+
+# Tween 基础
+
+**Tween** 是 GSAP 的最小单位——把一个或多个对象的属性从 A 补间到 B。它对标 Motion 的 `animate={{ ... }}`。
+
+GSAP 提供四种 tween 方法，加上**目标语法**与 `stagger`，覆盖 80% 的单次动画需求。
+
+## 四种 tween 方法
+
+| 方法 | 起点 | 终点 | 类比 |
+| ---- | ---- | ---- | ---- |
+| `gsap.to()` | **当前值** | 指定值 | Motion 的 `animate` |
+| `gsap.from()` | 指定值 | 当前值 | Motion 的 `initial → animate`（反向） |
+| `gsap.fromTo()` | 指定起点 | 指定终点 | Motion 的 `initial + animate` |
+| `gsap.set()` | 立即 | 指定值（无动画） | DOM 样式赋值 |
+
+### gsap.to（最常用）
+
+```tsx
+gsap.to('.box', { x: 100, duration: 1 })
+```
+
+`.box` 元素从**当前 X 位置**滑到 `x: 100`，用时 1 秒。
+
+### gsap.from（入场动画首选）
+
+```tsx
+gsap.from('.box', { y: 50, opacity: 0, duration: 0.6 })
+```
+
+`.box` 从 `y: 50, opacity: 0` 滑到**当前 CSS 状态**——常用于"入场动画"，因为不需要先把元素改成隐藏状态。
+
+> 这个细节常被忽略：`gsap.from` 的"终点"是元素在 CSS 中的自然状态。HTML 里写 `opacity: 1` 的元素，`gsap.from({ opacity: 0 })` 会从 0 → 1。
+
+### gsap.fromTo（精确控制两端）
+
+```tsx
+gsap.fromTo(
+  '.box',
+  { y: 50, opacity: 0 },     // 起点
+  { y: 0, opacity: 1, duration: 0.6 }  // 终点
+)
+```
+
+起点和终点都显式指定——避免 `from` / `to` 时和当前值耦合。
+
+### gsap.set（立即赋值，不动画）
+
+```tsx
+gsap.set('.box', { x: 100, opacity: 0 })
+```
+
+等价于直接改 `style`——但走 GSAP 通道，**记录**了这个状态，后续 `gsap.from` 能从这里反推。
+
+> 重置元素状态、初始化布局时常用。
+
+## 目标语法
+
+第一个参数是"动画对象"，支持多种形式：
+
+```tsx
+gsap.to('.box', { ... })                   // CSS 选择器（字符串）
+gsap.to(elementRef.current, { ... })       // 单个 DOM 节点
+gsap.to([el1, el2, el3], { ... })          // 节点数组
+gsap.to(document.querySelectorAll('.x'), { ... })  // NodeList
+gsap.to(plainObject, { ... })              // 普通 JS 对象（数字动画）
+```
+
+### 给 JS 对象做动画
+
+GSAP 不只能动画 DOM——任何对象的数值属性都能被 tween：
+
+```tsx
+const obj = { count: 0 }
+
+gsap.to(obj, {
+  count: 100,
+  duration: 2,
+  onUpdate: () => {
+    document.querySelector('.counter')!.textContent = obj.count.toFixed(0)
+  },
+})
+```
+
+数字滚动、计数器、状态机插值都靠这个。
+
+## 配置对象参数
+
+所有 tween 的第二个参数是一个**vars 对象**——包含目标值 + 动画选项。
+
+| 字段 | 类型 | 说明 |
+| ---- | ---- | ---- |
+| **属性名（如 `x`、`opacity`）** | 数字 / 字符串 / 函数 | 目标值 |
+| `duration` | number | 时长（秒）默认 0.5 |
+| `delay` | number | 延迟（秒） |
+| `ease` | string | 缓动函数（默认 `'power1.out'`） |
+| `repeat` | number | 重复次数（`-1` = 无限） |
+| `repeatDelay` | number | 重复之间的间隔 |
+| `yoyo` | boolean | 重复时来回弹（类似 Motion 的 `repeatType: 'reverse'`） |
+| `paused` | boolean | 创建后是否暂停 |
+| `stagger` | number / object | 多目标错峰 |
+| `onStart` / `onUpdate` / `onComplete` | function | 生命周期回调 |
+| `scrollTrigger` | object | 配合 ScrollTrigger 插件 |
+
+### 常用属性别名（CSSPlugin）
+
+GSAP 内置 CSSPlugin，DOM 元素的 transform / 颜色 / 滤镜都能直接动画：
+
+| 别名 | CSS 等价 |
+| ---- | -------- |
+| `x` | `transform: translateX(...)` |
+| `y` | `transform: translateY(...)` |
+| `xPercent` / `yPercent` | `translate(x%)` |
+| `scale` / `scaleX` / `scaleY` | `transform: scale(...)` |
+| `rotation` / `rotationX` / `rotationY` | `transform: rotate(...)` |
+| `skewX` / `skewY` | `transform: skew(...)` |
+| `transformOrigin` | `transform-origin` |
+| `autoAlpha` | `opacity + visibility`（透明时自动 hidden） |
+| `backgroundColor` / `color` | 对应 CSS 属性 |
+
+### `autoAlpha` 是好东西
+
+```tsx
+gsap.to('.box', { autoAlpha: 0, duration: 0.3 })
+```
+
+不仅 opacity 到 0，同时设置 `visibility: hidden`——避免透明元素仍能被点击 / 选中。这是 Motion 没有的优雅 API。
+
+### 直接传 CSS 属性
+
+```tsx
+gsap.to('.box', {
+  width: 200,
+  height: 100,
+  backgroundColor: '#3b82f6',
+  borderRadius: 12,
+})
+```
+
+非 transform 属性会触发 layout/paint，性能不如 transform——能用 `x` / `y` / `scale` 别用 `width` / `height`。
+
+## CSS Variable 作为目标（3.13 新增）
+
+GSAP 3.13 起支持直接以 CSS 变量作为目标值：
+
+```tsx
+gsap.to('.box', { color: 'var(--brand)' })
+gsap.to(':root', { '--accent': '#ef4444', duration: 0.6 })
+```
+
+第二行尤其有用——动画一个全局 CSS 变量，所有用到它的元素自动跟随变化。配合主题切换、暗色模式、动态品牌色场景非常顺手。
+
+## 缓动 ease
+
+GSAP 的 ease 比 CSS 丰富得多，写法是字符串：
+
+```tsx
+gsap.to('.box', { x: 100, ease: 'power2.out' })
+```
+
+常用 ease：
+
+| ease | 形态 | 适合 |
+| ---- | ---- | ---- |
+| `none` / `linear` | 匀速 | 进度条、转圈 |
+| `power1.in` / `out` / `inOut` | 轻微加速 | 通用 |
+| `power2.in / out / inOut` | 中等加速 | 入场、退场 |
+| `power3` / `power4` | 更强 | 戏剧性 |
+| `expo.in / out` | 指数曲线 | 强烈减速 / 加速 |
+| `back.out(1.7)` | 回弹（超调） | 趣味交互 |
+| `elastic.out(1, 0.3)` | 橡皮筋 | 弹性入场 |
+| `bounce.out` | 弹跳 | 落地反弹 |
+
+详见 [缓动深入](/motion/gsap-easing) 章。
+
+> **零基础口诀**：入场用 `'power2.out'`、退场用 `'power2.in'`、趣味用 `'back.out'`，先记这三个。
+
+## stagger 错峰
+
+多个目标依次动画，不要同时——`stagger` 控制时间差：
+
+### 简单写法（每个相隔 N 秒）
+
+```tsx
+gsap.from('.card', {
+  y: 30,
+  opacity: 0,
+  duration: 0.5,
+  stagger: 0.1,  // 每个相隔 0.1s
+})
+```
+
+5 个 `.card` 元素依次入场——比 Motion 的 `staggerChildren` 更直接（不用包父级 variants）。
+
+### 对象写法（精细控制）
+
+```tsx
+gsap.from('.card', {
+  y: 30,
+  opacity: 0,
+  duration: 0.5,
+  stagger: {
+    each: 0.1,           // 每个相隔
+    from: 'center',      // 起始位置：'start' / 'end' / 'center' / 'edges' / 'random'
+    grid: 'auto',        // 网格布局
+    ease: 'power2.in',   // stagger 自身的 ease（控制密度）
+  },
+})
+```
+
+`from: 'center'` ——网格中心的元素先动，向四周扩散。营销页常用。
+
+### 函数式
+
+```tsx
+stagger: (i, target) => i * 0.05 + Math.random() * 0.1
+```
+
+完全控制每个元素的延迟时间。
+
+## 生命周期回调
+
+```tsx
+gsap.to('.box', {
+  x: 100,
+  duration: 1,
+  onStart: () => console.log('开始'),
+  onUpdate: function () {
+    console.log('进度', this.progress())
+  },
+  onComplete: () => console.log('结束'),
+  onRepeat: () => console.log('每次重复'),
+  onReverseComplete: () => console.log('反向播完'),
+})
+```
+
+`this` 指向 tween 实例——可以查 `progress()` / `time()` 等。
+
+## 控制 tween
+
+`gsap.to()` 返回一个 tween 实例：
+
+```tsx
+const tween = gsap.to('.box', { x: 100, duration: 2 })
+
+tween.pause()
+tween.play()
+tween.reverse()
+tween.restart()
+tween.kill()             // 销毁
+
+tween.progress(0.5)      // 跳到 50%
+tween.time(1)            // 跳到 1s
+tween.duration(3)        // 改时长
+tween.timeScale(2)       // 2 倍速
+```
+
+## React 中的实际用法
+
+```tsx filename="components/Card.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { useRef } from 'react'
+
+export function Card() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.from('.title', { y: 30, opacity: 0, duration: 0.5 })
+      gsap.from('.desc', { y: 20, opacity: 0, duration: 0.4, delay: 0.2 })
+      gsap.from('.btn', { scale: 0.8, opacity: 0, duration: 0.3, delay: 0.4, ease: 'back.out(2)' })
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container}>
+      <h2 className="title">标题</h2>
+      <p className="desc">描述</p>
+      <button className="btn">行动</button>
+    </div>
+  )
+}
+```
+
+观察：每个 tween 用 `delay` 串起来——能用就够，但**多元素时间编排请用 timeline**，下一章详解。
+
+## 陷阱
+
+### `from` 起点会立刻被设置到 DOM
+
+```tsx
+gsap.from('.box', { opacity: 0, delay: 1 })
+```
+
+`.box` **立刻** opacity 0——1 秒后才开始动画。视觉上"1 秒空白"。
+
+修复：要么用 `gsap.set` 先隐藏 + `gsap.to` 显示；要么 `immediateRender: false`：
+
+```tsx
+gsap.from('.box', { opacity: 0, delay: 1, immediateRender: false })
+```
+
+### 多次 `gsap.to` 同一目标可能打架
+
+```tsx
+gsap.to('.box', { x: 100, duration: 1 })
+gsap.to('.box', { x: 200, duration: 1 })  // 后一个立即覆盖前一个的 x 部分
+```
+
+GSAP 默认 `overwrite: 'auto'`——同元素同属性的新动画会终止旧动画。多数场景这是想要的；如果想保留旧动画显式设 `overwrite: false`。
+
+### 选择器找不到元素
+
+```tsx
+useGSAP(() => {
+  gsap.from('.box', {...})  // ❌ scope 外
+}, { /* scope 漏了 */ })
+```
+
+`useGSAP` 没传 `scope` 时，选择器是**全局** `document.querySelectorAll`——容易匹配到其他组件。**永远传 scope**。
+
+## 小结
+
+- 四种 tween：`to` / `from` / `fromTo` / `set`
+- `gsap.from` 是"入场动画"首选——起点指定、终点是当前 CSS
+- `autoAlpha` 比 opacity 更安全——同时管 visibility
+- 3.13 新增对 CSS Variable 的支持，主题切换场景方便
+- `stagger` 表达多目标错峰，对象形式可指定 from 中心 / 网格
+- 多元素编排请用 Timeline（下章）
+- 永远在 `useGSAP` 内写 GSAP，并传 `scope`

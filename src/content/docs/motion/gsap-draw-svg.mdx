@@ -1,0 +1,254 @@
+---
+title: DrawSVG
+description: SVG 路径"画"出来——一笔一画的描边动画
+---
+
+# DrawSVG
+
+`DrawSVGPlugin` 让 SVG 描边像**笔在画纸上一样**逐渐出现——签名、Logo 描边、路径强调的标准实现。
+
+> 这个插件在 3.13 起免费可商用——之前是 Club GSAP 独享。
+
+## 与 Motion `pathLength` 的差异
+
+| 维度 | Motion `pathLength` | GSAP DrawSVG |
+| ---- | ------------------- | ------------ |
+| 起点控制 | 仅从 0 开始 | 可以从任意位置开始任意位置结束 |
+| 反向绘制 | 不方便 | `from: '100% 0%'` 直接反过来 |
+| 中间段绘制 | 不支持 | `'30% 70%'` 只画中间一段 |
+| 多段独立 | 各 path 单独写 | 可一次性配置多段 |
+
+DrawSVG 在**只画一部分**和**起点不在原点**的场景比 Motion 优势明显。
+
+## 安装
+
+```tsx
+import gsap from 'gsap'
+import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin'
+
+gsap.registerPlugin(DrawSVGPlugin)
+```
+
+## 第一个示例
+
+```tsx filename="components/DrawLine.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(DrawSVGPlugin)
+
+export function DrawLine() {
+  const container = useRef<SVGSVGElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.from('.line', {
+        drawSVG: '0%',          // 起点 0%、终点 0% → 完全不可见
+        duration: 1.5,
+        ease: 'power2.out',
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <svg ref={container} viewBox="0 0 200 100">
+      <path
+        className="line"
+        d="M 10 50 Q 100 0, 190 50"
+        fill="none"
+        stroke="#3b82f6"
+        strokeWidth="3"
+      />
+    </svg>
+  )
+}
+```
+
+`drawSVG: '0%'` 意思是"起点和终点都在 0% 位置"——什么都看不到。`gsap.from` 让动画**从这个起点动画到 CSS 状态**（默认是完全显示）。
+
+## drawSVG 的值
+
+`drawSVG` 接受字符串，描述**起止位置**：
+
+```tsx
+drawSVG: '0%'            // 等价 '0% 0%'——完全隐藏
+drawSVG: '100%'          // 等价 '0% 100%'——完全显示
+drawSVG: '50%'           // 等价 '0% 50%'——只显示前一半
+drawSVG: '30% 70%'       // 只显示 30%~70% 中间段
+drawSVG: '100% 100%'     // 终点贴终点——空
+drawSVG: '0 100'         // 像素值也可（不带 %）
+```
+
+### 反向绘制
+
+```tsx
+gsap.from('.line', { drawSVG: '100% 100%' })  // 从右往左收回
+```
+
+或 `'100% 0%'`——起点在 100%、终点在 0%（GSAP 自动识别）。
+
+### 中间段绘制
+
+```tsx
+gsap.fromTo('.line',
+  { drawSVG: '50% 50%' },         // 中间一点出发
+  { drawSVG: '0% 100%', duration: 1.5 }  // 向两端绘制
+)
+```
+
+效果：从中间向两边同时延伸——比从一端单向更有戏剧性。
+
+## stagger 多条线
+
+```tsx
+gsap.from('.line', {
+  drawSVG: '0%',
+  duration: 1,
+  stagger: 0.2,
+})
+```
+
+匹配多条 `.line` 时依次绘制。
+
+## 实战示例
+
+### Logo 描边动画
+
+```tsx filename="components/LogoDraw.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(DrawSVGPlugin)
+
+export function LogoDraw() {
+  const container = useRef<SVGSVGElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.timeline()
+        .from('.path', {
+          drawSVG: '0%',
+          duration: 1.5,
+          ease: 'power2.inOut',
+          stagger: 0.3,
+        })
+        .from('.fill', { opacity: 0, duration: 0.5 }, '-=0.3')
+    },
+    { scope: container }
+  )
+
+  return (
+    <svg ref={container} viewBox="0 0 200 100">
+      <path className="path" d="..." stroke="black" strokeWidth="2" fill="none" />
+      <path className="path" d="..." stroke="black" strokeWidth="2" fill="none" />
+      <path className="fill" d="..." fill="black" />
+    </svg>
+  )
+}
+```
+
+每条线依次画出，最后填充实色——专业 Logo 入场动画。
+
+### 签名动画
+
+```tsx
+gsap.from('.signature path', {
+  drawSVG: '0%',
+  duration: 3,
+  ease: 'sine.inOut',
+  stagger: 0.05,
+})
+```
+
+把签名拆成多个 path（按笔顺），依次绘制——签名感很真。
+
+### 进度环
+
+```tsx
+gsap.fromTo('.progress',
+  { drawSVG: '0%' },
+  {
+    drawSVG: (i) => `${progress}%`,
+    duration: 0.5,
+    ease: 'power2.out',
+  }
+)
+```
+
+`drawSVG` 接受函数——动态计算每个目标的进度值。
+
+### 与 ScrollTrigger 配合
+
+```tsx
+gsap.from('.path', {
+  drawSVG: '0%',
+  scrollTrigger: {
+    trigger: '.svg-container',
+    start: 'top 80%',
+    end: 'bottom 50%',
+    scrub: 1,
+  },
+})
+```
+
+滚动时路径"画"出来——滚动叙事中常用。
+
+## 与 stroke-dasharray 的关系
+
+DrawSVG 底层就是控制 `stroke-dasharray` 和 `stroke-dashoffset`——它替你算了 path 的总长度。手写这两个属性也能实现绘制效果，但需要：
+
+```js
+const length = path.getTotalLength()
+path.style.strokeDasharray = length
+path.style.strokeDashoffset = length
+```
+
+手动算长度繁琐又容易出错——DrawSVG 自动处理。
+
+## 陷阱
+
+### path 必须有 stroke
+
+```tsx
+<path d="..." fill="red" />        {/* ❌ DrawSVG 没视觉效果 */}
+<path d="..." stroke="red" strokeWidth="2" fill="none" />  {/* ✅ */}
+```
+
+DrawSVG 影响的是描边——没有 stroke 等于不画。
+
+### 闭合路径的"接缝"
+
+闭合 path（`Z` 结尾）从 100% 绕一圈回到起点。描绘到 100% 时起点位置有时会看到接缝——可以让结束位置稍微超出：
+
+```tsx
+gsap.from('.circle', { drawSVG: '0% 100%', duration: 1 })
+// 或
+gsap.from('.circle', { drawSVG: '0 0', duration: 1 })  // 完全隐藏到完全显示
+```
+
+### strokeLinecap 影响起止视觉
+
+```tsx
+<path strokeLinecap="round" />   {/* 圆头，起止看起来"软"一点 */}
+<path strokeLinecap="butt" />    {/* 平头，起止"硬" */}
+```
+
+签名 / 笔触感选 `round`、技术图选 `butt`。
+
+### 一次性创建大量 path 性能
+
+绘制 100+ path 时一帧内的 dashoffset 更新会变多——降低 stagger 间隔可缓解视觉密度。
+
+## 小结
+
+- DrawSVG = "笔在画纸上画"的标准实现
+- `drawSVG: '0%'` 隐藏、`drawSVG: '30% 70%'` 中段绘制、双值组合非常灵活
+- 必须 path 有 `stroke` 才有效果
+- 配合 Timeline + stagger 实现复杂 Logo 入场
+- 配合 ScrollTrigger + scrub 实现滚动驱动绘制
+- Motion `pathLength` 是它的简化版——简单场景互通，复杂控制选 DrawSVG

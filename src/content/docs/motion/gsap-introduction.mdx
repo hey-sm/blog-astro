@@ -1,0 +1,185 @@
+---
+title: GSAP 简介
+description: GSAP 3.13、Webflow 收购、全部插件免费、与 Motion 心智差异
+---
+
+# GSAP 简介
+
+**GSAP（GreenSock Animation Platform）** 是 Web 动画领域的"专业级工具箱"，已问世近 20 年。它的核心定位与 Motion 不同：
+
+- Motion 是**为 React 而生**的声明式组件库——状态驱动 UI 动画
+- GSAP 是**框架无关**的命令式时间轴引擎——精细编排复杂动画
+
+如果你的需求是"按钮按下变红"或"Modal 淡入"，Motion 几行代码搞定；如果你的需求是"30 秒的滚动叙事，文字逐字浮现 → SVG 路径绘制 → 形状变形 → 镜头推拉"，GSAP 是唯一选择。
+
+## 2025 的大变化：Webflow 收购 + 全免费
+
+2024 年底 Webflow 收购了 GreenSock 团队，2025 年 4 月发布 **GSAP 3.13**，宣布：
+
+- **GSAP 全部插件免费可商用**——包括过去 Club 会员独享的 SplitText、MorphSVG、DrawSVG、Inertia、GSDevTools、ScrollSmoother 等
+- **Club GSAP 退役**，旧的 Club 私有仓库 2025-06-01 后停用
+- **Webflow 集成**——在 Webflow 设置面板里一键启用 GSAP
+
+这意味着之前因为"插件要付费"而排斥 GSAP 的项目，现在没有理由犹豫。本系列涉及的全部插件均可免费使用。
+
+## 它能做什么
+
+- **Tween**：单次属性补间（`gsap.to`、`gsap.from`）
+- **Timeline**：链式时间轴，多个 tween 按时间编排
+- **ScrollTrigger**：滚动驱动动画 / pin / scrub
+- **ScrollSmoother**：原生平滑滚动（覆盖默认滚动）
+- **SplitText**：把文字拆成字符 / 单词 / 行，逐个动画
+- **DrawSVG**：SVG 路径"画"出来
+- **MorphSVG**：SVG 形状自动变形（解决 Motion `d` 插值的痛点）
+- **MotionPath**：沿任意路径运动
+- **Flip**：FLIP 布局动画（类似 Motion 的 `layout` prop）
+- **Draggable + Inertia**：拖拽 + 惯性甩出
+- **Observer**：统一鼠标 / 触摸 / 滚轮事件
+- **ScrambleText**：字符乱码切换
+- **TextPlugin**：文字打字 / 删除 / 数字滚动
+- **Physics2D / PhysicsProps**：2D 物理（重力、摩擦）
+- **GSDevTools**：时间轴可视化调试器
+
+总体约 25 个工具——按需引入，按需打包。
+
+## 与 Motion 的心智差异
+
+| 维度 | Motion | GSAP |
+| ---- | ------ | ---- |
+| 范式 | 声明式（状态 → 动画） | 命令式（调用 → 动画） |
+| 元素绑定 | `motion.div` 组件 | 选择器 / ref / DOM 节点 |
+| 时间编排 | Variants + `staggerChildren` | `timeline.to(...).to(...)` 链式 |
+| 时间轴控制 | 受限 | ⭐ 极强（labels、相对位置、嵌套） |
+| 与 React 集成 | 原生（核心 API） | 需要 `useGSAP`（`@gsap/react`） |
+| 状态触发 | ⭐ 简单（`animate={x}`） | 需要监听 state / useEffect 触发 |
+| 包大小 | ~40 KB（可减包） | ~25 KB 起，按插件累加 |
+| 学习曲线 | 平缓 | 中等（时间轴和 ease 概念多） |
+| 文档质量 | 良好 | ⭐ 极好（视频教程 + Demo 海量） |
+| 生态成熟度 | 5 年 | 近 20 年 |
+
+直白点：**Motion 适合写"组件动画"，GSAP 适合写"时间线作品"**。
+
+## 一段对比代码
+
+### Motion 写法
+
+```tsx
+import { motion } from 'motion/react'
+
+function Hero() {
+  return (
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={{
+        hidden: { opacity: 0 },
+        visible: {
+          opacity: 1,
+          transition: { staggerChildren: 0.2 },
+        },
+      }}
+    >
+      <motion.h1 variants={{ hidden: { y: 50 }, visible: { y: 0 } }}>标题</motion.h1>
+      <motion.p variants={{ hidden: { y: 20 }, visible: { y: 0 } }}>副标题</motion.p>
+      <motion.button variants={{ hidden: { scale: 0 }, visible: { scale: 1 } }}>开始</motion.button>
+    </motion.div>
+  )
+}
+```
+
+### GSAP 写法
+
+```tsx
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { useRef } from 'react'
+
+function Hero() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      const tl = gsap.timeline()
+      tl.from('h1', { y: 50, opacity: 0, duration: 0.6 })
+        .from('p', { y: 20, opacity: 0, duration: 0.5 }, '-=0.3')
+        .from('button', { scale: 0, opacity: 0, duration: 0.4 }, '-=0.2')
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container}>
+      <h1>标题</h1>
+      <p>副标题</p>
+      <button>开始</button>
+    </div>
+  )
+}
+```
+
+观察差异：
+
+- Motion 的状态绑在 JSX 上——读 JSX 就知道动画
+- GSAP 的动画逻辑全在 `useGSAP` 里——读 JSX 不知道动画细节，但**时间轴编排更紧凑**（`'-=0.3'` 表示"提前 0.3 秒开始"）
+- GSAP 用普通 `<h1>` / `<p>`——HTML 结构干净
+
+## React 集成方案：`@gsap/react`
+
+旧时代写法（React 18 之前）：
+
+```tsx
+useEffect(() => {
+  const ctx = gsap.context(() => {
+    gsap.to('.box', { x: 100 })
+  }, containerRef)
+  return () => ctx.revert()
+}, [])
+```
+
+繁琐。`@gsap/react` 包提供 `useGSAP` Hook 简化：
+
+```tsx
+import { useGSAP } from '@gsap/react'
+
+useGSAP(() => {
+  gsap.to('.box', { x: 100 })
+}, { scope: containerRef })
+```
+
+`useGSAP` 自动处理：
+
+- React 18 / 19 StrictMode 的双调用
+- 卸载时清理动画
+- `scope` 限定选择器范围（类似 Motion 的 `useAnimate` scope）
+
+**用 GSAP 写 React，永远从 `useGSAP` 开始**——细节见下一章 [安装与 React 集成](/motion/gsap-install)。
+
+## 何时选 GSAP
+
+| 你的需求 | 推荐 |
+| -------- | ---- |
+| 业务交互、Modal、按钮 | Motion |
+| 列表增删 / 拖拽排序 | Motion |
+| 简单滚动入场 | Motion `whileInView` |
+| 视差 / 进度条 | Motion `useScroll` 够用 |
+| 复杂滚动叙事（pin、阶段切换） | **GSAP ScrollTrigger** |
+| 文字逐字 / 逐行动画 | **GSAP SplitText** |
+| SVG 路径 morph | **GSAP MorphSVG** |
+| Logo 描边动画 | **GSAP DrawSVG** |
+| 多步骤时间轴（10 个元素按节奏） | **GSAP Timeline** |
+| 沿曲线运动 | **GSAP MotionPath** |
+
+业务项目通常 Motion 足矣；GSAP 是**特定需求的专业工具**。
+
+## 本篇之后
+
+- [安装与 React 集成](/motion/gsap-install)：装包、`useGSAP`、`scope`、StrictMode
+- [Tween 基础](/motion/gsap-tween)：`to` / `from` / `fromTo` / `set` / `stagger`
+- [Timeline 编排](/motion/gsap-timeline)：时间轴的灵魂——位置参数、labels、嵌套
+
+## 小结
+
+- GSAP 3.13 全免费——包括过去要付费的 SplitText / DrawSVG / MorphSVG / ScrollSmoother 等
+- 心智差异：Motion 是 React 状态驱动，GSAP 是命令式时间轴
+- React 用户必装 `@gsap/react`，用 `useGSAP` Hook 取代裸 `useEffect`
+- 同一项目可与 Motion 共存——分场景使用

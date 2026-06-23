@@ -1,0 +1,230 @@
+---
+title: GSDevTools
+description: 浏览器内可视化调试 GSAP 时间轴——播放控制、变速、跳进度
+---
+
+# GSDevTools
+
+`GSDevTools` 是 GSAP 的**可视化调试面板**——在浏览器底部出现一条进度条，能 play / pause / 慢放 / 拖动跳进度。开发复杂时间轴动画时**几乎是必备**。
+
+> 这个工具在 3.13 起免费可商用——之前是 Club GSAP 独享。
+
+## 它解决什么
+
+写一个 10 秒钟的滚动叙事——每次调一个参数就得从头看到尾，太耗时。GSDevTools 让你：
+
+- 一键暂停 / 播放
+- 0.1x ~ 4x 变速
+- 拖进度条精确到某帧
+- 反向播放检查时序
+- 跳到 timeline 的 label
+
+省下大量调试时间。
+
+## 安装
+
+```tsx
+import gsap from 'gsap'
+import { GSDevTools } from 'gsap/GSDevTools'
+
+gsap.registerPlugin(GSDevTools)
+```
+
+## 基础用法
+
+```tsx
+useGSAP(() => {
+  const tl = gsap.timeline({ id: 'main' })
+
+  tl.from('.title', { y: 30, opacity: 0, duration: 0.6 })
+    .from('.btn', { scale: 0, duration: 0.4 })
+
+  GSDevTools.create({ animation: 'main' })
+}, { scope: container })
+```
+
+页面底部立刻出现调试条——拖进度查动画各阶段。
+
+## 配置
+
+```tsx
+GSDevTools.create({
+  animation: 'main',          // timeline 的 id
+  globalSync: false,          // 是否同步所有 timeline
+  loop: true,                 // 默认循环
+  paused: false,              // 创建时是否暂停
+  visibility: 'visible',      // 'visible' / 'hidden' / 'auto'
+  container: '#debug-area',   // 工具栏挂载位置
+  minimal: false,             // 极简模式（只播放按钮）
+  inTime: 0,                  // 默认起点
+  outTime: 10,                // 默认终点
+  timeScale: 1,               // 默认速度
+})
+```
+
+`animation` 可以是 timeline 实例或 id 字符串。
+
+## 给 tween / timeline 加 id
+
+```tsx
+const tl = gsap.timeline({ id: 'hero-intro' })
+
+const t = gsap.to('.box', { x: 100, id: 'box-move' })
+
+GSDevTools.create({ animation: 'hero-intro' })
+// 或
+GSDevTools.create({ animation: 'box-move' })
+```
+
+`id` 让 DevTools 在多个动画中选择目标——下拉切换很方便。
+
+## globalSync 模式
+
+```tsx
+GSDevTools.create({ globalSync: true })
+```
+
+不指定 `animation`、设 `globalSync: true` 时，DevTools 控制**页面上所有 GSAP 动画**——一起播放、一起暂停。调试整页时空闲。
+
+## 生产环境关闭
+
+DevTools 一定**只在开发环境启用**：
+
+```tsx
+if (import.meta.env.DEV) {
+  GSDevTools.create({ animation: 'main' })
+}
+```
+
+Next.js / Astro 也类似：
+
+```tsx
+if (process.env.NODE_ENV === 'development') {
+  GSDevTools.create({ animation: 'main' })
+}
+```
+
+不能让用户看到调试条。
+
+## 与 ScrollTrigger 配合
+
+ScrollTrigger 驱动的 timeline 默认锁定到滚动条——`GSDevTools.create` 会临时**解锁**，让你能手动拖进度：
+
+```tsx
+const tl = gsap.timeline({
+  id: 'scroll-tl',
+  scrollTrigger: { trigger: '.section', scrub: 1 },
+})
+
+tl.to('.box', { x: 200 })
+
+GSDevTools.create({ animation: 'scroll-tl' })
+```
+
+DevTools 显示后，拖动进度条而不是页面滚动就能预览——避免来回滚动浪费时间。
+
+## 隐藏 / 显示
+
+DevTools 工具栏右上角有 `_` 按钮可以收起。也能用 API：
+
+```tsx
+const dev = GSDevTools.create({ animation: 'main' })
+dev.hide()
+dev.show()
+```
+
+## 实战工作流
+
+```tsx filename="components/HeroScene.tsx (开发版)"
+'use client'
+
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { GSDevTools } from 'gsap/GSDevTools'
+import { useRef } from 'react'
+
+if (process.env.NODE_ENV === 'development') {
+  gsap.registerPlugin(GSDevTools)
+}
+
+export function HeroScene() {
+  const container = useRef<HTMLElement>(null)
+
+  useGSAP(
+    () => {
+      const tl = gsap.timeline({ id: 'hero', paused: process.env.NODE_ENV === 'development' })
+
+      tl.from('.logo', { scale: 0, rotation: -180, duration: 0.8 })
+        .from('.title', { y: 40, opacity: 0, duration: 0.6 }, '-=0.3')
+        .from('.subtitle', { y: 20, opacity: 0, duration: 0.5 }, '-=0.4')
+
+      if (process.env.NODE_ENV === 'development') {
+        GSDevTools.create({ animation: 'hero' })
+      }
+    },
+    { scope: container }
+  )
+
+  return (
+    <section ref={container}>
+      <div className="logo">★</div>
+      <h1 className="title">Welcome</h1>
+      <p className="subtitle">Hello</p>
+    </section>
+  )
+}
+```
+
+开发模式：timeline 暂停 + DevTools 弹出。生产：timeline 自动播。
+
+## 陷阱
+
+### 多个 DevTools 实例
+
+每个 `GSDevTools.create` 都会创建一条工具栏——同一页面创建多次会叠起来。需要时手动 kill：
+
+```tsx
+const dev = GSDevTools.create({ animation: 'main' })
+
+// 替换为另一个
+dev.kill()
+GSDevTools.create({ animation: 'other' })
+```
+
+### React 热更新
+
+React 热更新组件时，旧 DevTools 实例不会被自动 kill——`useGSAP` 的 cleanup 应该处理：
+
+```tsx
+useGSAP(() => {
+  const tl = gsap.timeline({ id: 'main' })
+  // ...
+
+  if (import.meta.env.DEV) {
+    const dev = GSDevTools.create({ animation: 'main' })
+    return () => dev.kill()
+  }
+}, { scope: container })
+```
+
+### Timeline 没 id 找不到
+
+```tsx
+const tl = gsap.timeline()  // ❌ 没 id
+GSDevTools.create({ animation: 'main' })  // 找不到
+```
+
+要么给 timeline 加 `id`，要么直接传 timeline 实例：
+
+```tsx
+const tl = gsap.timeline()
+GSDevTools.create({ animation: tl })  // ✅ 直接传实例
+```
+
+## 小结
+
+- GSDevTools = GSAP 动画的浏览器调试面板
+- 一定**只在开发环境启用**——生产代码里加环境判断
+- 给 timeline / tween 加 `id` 方便 DevTools 选择
+- 与 ScrollTrigger 配合时会临时解锁，方便预览
+- 复杂时间轴调试的"加速器"——一次熟悉省下未来无数小时

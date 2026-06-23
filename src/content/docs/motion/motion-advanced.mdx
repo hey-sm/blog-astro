@@ -1,0 +1,271 @@
+---
+title: Motion 进阶能力
+description: LazyMotion 减包、MotionConfig 全局配置、useReducedMotion 无障碍
+---
+
+# Motion 进阶能力
+
+到目前为止讲的都是日常 API。本章讲三个**工程优化**层面的能力——包大小控制、全局配置、无障碍支持——它们不会让你的动画更酷，但能让你的项目更专业。
+
+## LazyMotion 减包
+
+默认 `import { motion } from 'motion/react'` 会引入完整的动画引擎——支持 hover、tap、drag、layout、AnimatePresence 等所有特性。打包后约 **40 KB gzipped**。
+
+对包大小敏感的项目（落地页、首屏 JS 预算紧张），可以用 `<LazyMotion>` + `m.*` 组件按需加载特性：
+
+```tsx filename="App.tsx"
+import { LazyMotion, domAnimation, m } from 'motion/react'
+
+function App() {
+  return (
+    <LazyMotion features={domAnimation}>
+      <m.div animate={{ x: 100 }} />
+    </LazyMotion>
+  )
+}
+```
+
+注意三件事：
+
+1. 用 `m.*`（小写 m）替代 `motion.*`——这是"轻量版"
+2. 把树根用 `<LazyMotion>` 包起来
+3. `features={domAnimation}` 是一个**特性包**
+
+### 三个特性包
+
+| 特性包 | 大小（gzip） | 包含 |
+| ------ | ------------ | ---- |
+| `domAnimation` | ~15 KB | 基础动画 + hover/tap/focus/inView + variants |
+| `domMax` | ~25 KB | `domAnimation` + drag + layout + AnimatePresence |
+| 完整 `motion` | ~40 KB | 全部 |
+
+按需选择——大部分网站用 `domAnimation` 已够，需要拖拽 / 布局动画的页面再升 `domMax`。
+
+### 异步加载
+
+`features` 也可以传 Promise，让特性包按需异步加载：
+
+```tsx
+<LazyMotion
+  features={() => import('motion/react').then(mod => mod.domMax)}
+  strict
+>
+  <App />
+</LazyMotion>
+```
+
+特性包不在初始 bundle 里——只有首次用到 `m.*` 时才下载。Vite / webpack 会把它打成独立 chunk。
+
+### `strict` 模式
+
+```tsx
+<LazyMotion features={domAnimation} strict>
+```
+
+`strict` 开启时，如果代码里**还残留 `motion.*` 大写**会抛错——避免你以为减包了但实际还是引入了完整版。强烈推荐开启。
+
+## MotionConfig 全局配置
+
+某些设置全站统一更优雅——避免在每个 `motion.*` 上重写 `transition`、`reducedMotion` 等：
+
+```tsx filename="App.tsx"
+import { MotionConfig } from 'motion/react'
+
+function App() {
+  return (
+    <MotionConfig
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      reducedMotion="user"
+    >
+      <Routes />
+    </MotionConfig>
+  )
+}
+```
+
+子树内所有 `motion.*` 元素：
+
+- 没显式指定 `transition` 的，沿用配置的默认值
+- `reducedMotion` 设置生效
+
+### 配置项
+
+| prop | 作用 |
+| ---- | ---- |
+| `transition` | 默认 transition |
+| `reducedMotion` | `'always'` / `'never'` / `'user'`——是否禁用动画 |
+| `nonce` | CSP 内嵌样式的 nonce 值 |
+
+### 嵌套覆盖
+
+```tsx
+<MotionConfig transition={{ duration: 0.3 }}>
+  <SectionA />          {/* 默认 0.3s */}
+  <MotionConfig transition={{ duration: 0.6 }}>
+    <SectionB />        {/* 覆盖为 0.6s */}
+  </MotionConfig>
+</MotionConfig>
+```
+
+## useReducedMotion 无障碍
+
+部分用户开启了操作系统的"减少动画"偏好（前庭功能障碍、晕动症需求）。良好的应用会**尊重这个偏好**——动画大幅缩短或完全跳过。
+
+```tsx
+import { useReducedMotion, motion } from 'motion/react'
+
+function Hero() {
+  const shouldReduce = useReducedMotion()
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: shouldReduce ? 0 : 50 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: shouldReduce ? 0 : 0.5 }}
+    >
+      ...
+    </motion.div>
+  )
+}
+```
+
+`useReducedMotion()` 返回 `boolean`——用户开启了"减少动画"就是 `true`。
+
+### 全局开启
+
+更简单的方案是 `<MotionConfig reducedMotion="user">`——Motion 自动检测系统偏好并**禁用所有 transform / 位移动画**，但保留 opacity 渐隐（信息变化仍然需要被看见）。
+
+```tsx
+<MotionConfig reducedMotion="user">
+  <App />
+</MotionConfig>
+```
+
+| `reducedMotion` 值 | 含义 |
+| ------------------ | ---- |
+| `'always'` | 强制禁用（开发调试用） |
+| `'never'` | 强制启用（默认） |
+| `'user'` | 跟随系统偏好 |
+
+**生产应用建议默认 `'user'`**——这是最体贴的设置。
+
+### CSS 后备
+
+非 Motion 的元素也要做无障碍——在全局 CSS 加：
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+Motion 处理 motion，CSS 处理其他 CSS 动画——两者互补。
+
+## MotionGlobalConfig.skipAnimations（测试用）
+
+写测试时不想等动画跑完：
+
+```ts filename="setup.ts"
+import { MotionGlobalConfig } from 'motion/react'
+
+MotionGlobalConfig.skipAnimations = true
+```
+
+设置后所有 Motion 动画**瞬间完成**——值直接到终点，回调正常触发。`onAnimationComplete` 等仍然会被调用，但用时为 0。
+
+测试场景常用：
+
+```ts
+import { render, screen } from '@testing-library/react'
+import { MotionGlobalConfig } from 'motion/react'
+
+beforeAll(() => { MotionGlobalConfig.skipAnimations = true })
+afterAll(() => { MotionGlobalConfig.skipAnimations = false })
+
+test('Modal opens', () => {
+  render(<Modal open={true} />)
+  expect(screen.getByText('内容')).toBeVisible()  // 不用等动画
+})
+```
+
+## Server Side Rendering（SSR）
+
+Motion 完全支持 SSR——`initial` 状态会被渲染到服务端 HTML 里，避免水合时的样式跳变。
+
+```tsx
+<motion.div
+  initial={{ opacity: 0 }}    // SSR 输出 style="opacity:0"
+  animate={{ opacity: 1 }}
+>
+  Hello
+</motion.div>
+```
+
+服务端渲染时 Motion 会把 `initial` 的样式同步序列化到 HTML——客户端水合后再启动 `initial → animate` 过渡。
+
+### Next.js App Router 注意
+
+App Router 默认 Server Component，`motion.*` 必须在 `'use client'` 文件里使用（[安装与接入](/motion/motion-install) 已详述）。
+
+### initial={false} 的用途
+
+如果某些场景**不希望 SSR 输出 initial 样式**（避免无 JS 用户看到隐藏的内容）：
+
+```tsx
+<motion.div initial={false} animate={{ opacity: 1 }} />
+```
+
+`initial={false}` 跳过初始动画 —— 元素直接以 `animate` 状态渲染，没有"先隐藏再淡入"。
+
+## 性能监控
+
+Motion 提供一个开发模式的 inspector：
+
+```tsx
+import { animateMini } from 'motion/react'
+```
+
+但更实用的方式是 Chrome DevTools 的 **Performance** + **Animations** 面板——能看到所有正在运行的动画，调整速度、检查掉帧。
+
+## 陷阱
+
+### LazyMotion 漏了 `m.*` 大写
+
+```tsx
+<LazyMotion features={domAnimation} strict>
+  <motion.div animate={{ x: 100 }} />  {/* 报错：用了大 M */}
+</LazyMotion>
+```
+
+修复：换成 `<m.div>`。`strict` 模式会立刻抛错，开发期就能发现。
+
+### MotionConfig 配置不会覆盖显式 prop
+
+```tsx
+<MotionConfig transition={{ duration: 0.6 }}>
+  <motion.div animate={{ x: 100 }} transition={{ duration: 0.2 }} />
+  {/* 用 0.2 不是 0.6——显式配置优先 */}
+</MotionConfig>
+```
+
+这是预期行为——`MotionConfig` 是"默认值"。
+
+### useReducedMotion 只读不写
+
+```tsx
+const shouldReduce = useReducedMotion()
+// shouldReduce 只反映系统设置，无法在代码里修改
+```
+
+要在代码里强制启用 / 禁用动画用 `<MotionConfig reducedMotion="always">`。
+
+## 小结
+
+- `<LazyMotion>` + `m.*` 把包从 40 KB 降到 15 KB，按需加载特性包
+- `<MotionConfig>` 全局设置默认 transition、无障碍偏好
+- `useReducedMotion()` 检测系统的"减少动画"偏好，配 `<MotionConfig reducedMotion="user">` 自动启用
+- 测试中用 `MotionGlobalConfig.skipAnimations = true` 跳过动画等待
+- SSR 默认支持，`initial` 会被序列化到 HTML

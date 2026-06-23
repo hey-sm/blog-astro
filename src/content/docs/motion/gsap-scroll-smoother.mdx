@@ -1,0 +1,272 @@
+---
+title: ScrollSmoother
+description: GSAP 的平滑滚动插件——丝滑滚动体验、与 ScrollTrigger 协同
+---
+
+# ScrollSmoother
+
+`ScrollSmoother` 让页面**滚起来更"丝滑"**——浏览器原生的滚动是离散的（一步一步跳），ScrollSmoother 在中间插入插值帧，让滚动看起来连续柔顺。
+
+> 这个插件曾是 Club GSAP 会员独享，3.13 起免费可商用。
+
+## 它解决什么
+
+原生滚动的离散感在以下场景特别明显：
+
+- 鼠标滚轮一格一格
+- 触控板惯性滚动后突然停止
+- 视差元素跟手不够顺
+
+ScrollSmoother 加一层"平滑滚动层"——同时配合 ScrollTrigger，让基于滚动的所有动画都跟着丝滑。
+
+## 安装与注册
+
+```tsx
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { ScrollSmoother } from 'gsap/ScrollSmoother'
+
+gsap.registerPlugin(ScrollTrigger, ScrollSmoother)
+```
+
+ScrollSmoother **必须配合 ScrollTrigger 一起注册**——它依赖后者。
+
+## HTML 结构要求
+
+ScrollSmoother 要求页面有两层包裹元素：
+
+```html
+<body>
+  <div id="smooth-wrapper">
+    <div id="smooth-content">
+      <!-- 实际内容 -->
+    </div>
+  </div>
+</body>
+```
+
+`smooth-wrapper` 用于钉住容器，`smooth-content` 是被位移的内容层。**这层结构必须存在**才能创建 ScrollSmoother。
+
+```css
+#smooth-wrapper {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+```
+
+## 创建 ScrollSmoother
+
+```tsx filename="components/SmoothLayout.tsx"
+'use client'
+
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { ScrollSmoother } from 'gsap/ScrollSmoother'
+import { useRef } from 'react'
+
+gsap.registerPlugin(ScrollTrigger, ScrollSmoother)
+
+export function SmoothLayout({ children }: { children: React.ReactNode }) {
+  const wrapper = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      ScrollSmoother.create({
+        wrapper: wrapper.current!,
+        content: content.current!,
+        smooth: 1.5,           // 平滑系数
+        effects: true,         // 启用 data-speed / data-lag 简便效果
+        smoothTouch: 0.1,      // 触屏的平滑（默认禁用）
+      })
+    },
+    { scope: wrapper }
+  )
+
+  return (
+    <div ref={wrapper} id="smooth-wrapper">
+      <div ref={content} id="smooth-content">
+        {children}
+      </div>
+    </div>
+  )
+}
+```
+
+把这个组件包在整个应用最外层——所有页面都会丝滑滚动。
+
+## 配置项
+
+| 配置 | 默认 | 含义 |
+| ---- | ---- | ---- |
+| `smooth` | 0.8 | 平滑系数（秒）。越大越柔，越小越跟手 |
+| `effects` | false | 启用 `data-speed` / `data-lag` 属性简便效果 |
+| `smoothTouch` | false | 触屏设备的平滑（默认禁用以保留原生体验） |
+| `normalizeScroll` | false | 标准化跨浏览器滚动行为 |
+| `ignoreMobileResize` | false | 移动端虚拟键盘弹出时不重新计算 |
+
+> **触屏建议保持默认 `smoothTouch: false`**——iOS/Android 用户已经习惯原生惯性，强加平滑反而生硬。需要时设小值 `0.1`。
+
+## data-speed：视差
+
+启用 `effects: true` 后，任何元素加 `data-speed` 即可有视差：
+
+```html
+<img data-speed="0.5" src="..." />   <!-- 滚动慢一半 -->
+<div data-speed="1.5">...</div>      <!-- 滚动快 1.5 倍 -->
+<h1 data-speed="0.2">...</h1>        <!-- 几乎不动 -->
+```
+
+`data-speed="1"` 等同正常滚动，`<1` 慢、`>1` 快。
+
+### data-lag：延迟
+
+```html
+<div data-lag="0.5">Lazy element</div>
+```
+
+元素滚动有 0.5 秒延迟——产生"懒"的拖尾感。
+
+## paused 与 React state 协同
+
+需要在弹窗打开时暂停滚动？
+
+```tsx
+const smoother = ScrollSmoother.create({ ... })
+
+// 弹窗打开
+smoother.paused(true)
+
+// 关闭
+smoother.paused(false)
+```
+
+或者直接调 ScrollSmoother 的静态方法：
+
+```tsx
+ScrollSmoother.get()?.paused(true)
+```
+
+## scrollTo
+
+平滑滚到某个位置 / 元素：
+
+```tsx
+const smoother = ScrollSmoother.get()
+
+smoother?.scrollTo('.section-2', true, 'top top')  // 第二个参数 true = 平滑
+smoother?.scrollTo(500, true)                       // 滚到 500px
+```
+
+第三个参数同 ScrollTrigger 的 start——表达"滚到元素的哪个位置"。
+
+## 与 ScrollTrigger 协同
+
+ScrollSmoother 启用后，所有 ScrollTrigger 自动跟随平滑滚动——你不需要改任何 ScrollTrigger 代码。它在内部协调好了。
+
+```tsx
+ScrollSmoother.create({ smooth: 1.5, ... })
+
+gsap.to('.box', {
+  x: 200,
+  scrollTrigger: {
+    trigger: '.box',
+    start: 'top center',
+    scrub: true,
+  },
+})
+```
+
+`scrub` 动画现在跟着平滑后的滚动条走——比直接绑原生滚动更流畅。
+
+## 何时不要用
+
+- **业务工具站、控制面板**：用户期待"立刻响应"——平滑滚动反而显得"慢半拍"
+- **要求精确滚动位置的应用**（编辑器、富文本工具）：平滑会破坏精确感
+- **iOS Safari 严重场景**：早期版本与 iOS 弹性滚动冲突；3.13 后已改善
+- **`position: fixed` 元素多的页面**：ScrollSmoother 用 transform 翻译滚动，fixed 定位可能行为异常
+
+**营销官网、作品集、滚动叙事页面是 ScrollSmoother 的主战场**。
+
+## 完整示例：滚动视差页
+
+```tsx filename="components/HeroPage.tsx"
+'use client'
+
+import { SmoothLayout } from './SmoothLayout'
+
+export function HeroPage() {
+  return (
+    <SmoothLayout>
+      <section className="h-screen relative">
+        <img
+          data-speed="0.4"
+          src="/bg.jpg"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <h1 data-speed="1.2" className="absolute inset-0 flex items-center justify-center text-6xl">
+          Welcome
+        </h1>
+      </section>
+
+      <section className="h-screen p-12">
+        <h2>第二屏</h2>
+      </section>
+    </SmoothLayout>
+  )
+}
+```
+
+背景慢滚（0.4 速）、标题快滚（1.2 速）——经典视差效果。代码几乎零动画 JS。
+
+## 陷阱
+
+### `<body>` 高度被 ScrollSmoother 接管
+
+ScrollSmoother 把 `smooth-wrapper` 设为 `position: fixed`，**body 不再产生滚动条**——content 内的高度才决定整体长度。
+
+副作用：在 wrapper 之外的元素（比如某些第三方挂件）可能定位错乱。处理办法：把它们放进 content 里，或避开 ScrollSmoother。
+
+### 与 `position: sticky` 不兼容
+
+ScrollSmoother 用 transform 翻译滚动，CSS `position: sticky` 依赖原生滚动定位——两者冲突。需要 sticky 效果时改用 ScrollTrigger 的 `pin` 替代。
+
+### React Router 切页后高度不更新
+
+```tsx
+useEffect(() => {
+  ScrollSmoother.get()?.refresh()
+}, [pathname])
+```
+
+切路由后 content 高度变了——手动刷新。
+
+### 在 SSR 框架中初始化时机
+
+ScrollSmoother 必须在客户端运行——Next.js App Router 中用 `'use client'` 标记容器组件。`useGSAP` 已经帮你跳过服务端。
+
+## 与 Lenis（社区方案）的对比
+
+[Lenis](https://github.com/darkroomengineering/lenis) 是社区流行的平滑滚动库，免费、独立。对比：
+
+| 维度 | ScrollSmoother | Lenis |
+| ---- | -------------- | ----- |
+| 包大小 | ~12 KB（GSAP 体系内） | ~5 KB |
+| 与 ScrollTrigger 协同 | ⭐ 无缝 | 需要手动桥接 |
+| 配置粒度 | 中等 | 高 |
+| 文档 | 官方完整 | 社区 |
+| 价格 | 免费（3.13 起） | 永久免费 |
+
+**已经在用 GSAP**——用 ScrollSmoother。**不用 GSAP**——Lenis 更轻量。
+
+## 小结
+
+- ScrollSmoother 在原生滚动上加一层"平滑层"——丝滑感的来源
+- 必须配合 ScrollTrigger 一起注册
+- 需要 `smooth-wrapper` + `smooth-content` 两层 HTML 结构
+- `data-speed` / `data-lag` 是最简单的视差实现
+- 触屏默认不平滑——别强行开启
+- 业务工具站不适合；营销页 / 叙事页是主战场
+- 与 ScrollTrigger 100% 协同，不用改任何动画代码

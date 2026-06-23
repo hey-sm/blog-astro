@@ -1,0 +1,339 @@
+---
+title: 关键帧动画
+description: 用数组语法在 Motion 里写多帧动画——times、repeat、yoyo、循环控制
+---
+
+# 关键帧动画
+
+到目前为止你写的动画都是**两点之间**——`initial` 是起点，`animate` 是终点，中间由缓动函数插值。
+
+但很多动画需要**三个或更多关键状态**：
+
+- 摇头：左 → 右 → 左 → 右 → 回中
+- 心跳：1 → 1.2 → 1 → 1.2 → 1
+- 弹跳：地面 → 顶 → 地面 → 半高 → 地面
+
+Motion 让你直接传**数组**作为目标——这就是关键帧动画。
+
+## 最简关键帧
+
+```tsx
+<motion.div animate={{ x: [0, 100, 0] }} />
+```
+
+含义：x 从 0 → 100 → 0，等分时间走完。
+
+```tsx filename="components/Shake.tsx"
+import { motion } from 'motion/react'
+
+export function Shake() {
+  return (
+    <motion.div
+      animate={{ x: [0, -10, 10, -10, 10, 0] }}
+      transition={{ duration: 0.5 }}
+    >
+      晃一下
+    </motion.div>
+  )
+}
+```
+
+数组里有 6 个值，duration 0.5s——每一段约 0.1s。
+
+## 多属性关键帧
+
+每个属性的数组**长度可以不同**：
+
+```tsx
+<motion.div
+  animate={{
+    x: [0, 100, 0],
+    rotate: [0, 90, 180, 270, 360],
+    backgroundColor: ['#3b82f6', '#ef4444', '#10b981']
+  }}
+  transition={{ duration: 2 }}
+/>
+```
+
+x 走 3 个点、rotate 走 5 个点、color 走 3 个点——它们独立等分自己的时间轴。
+
+## times：自定义时间分布
+
+默认数组等分时间。想让某一段走得更快或更慢，用 `times`：
+
+```tsx
+<motion.div
+  animate={{ scale: [1, 1.5, 1] }}
+  transition={{
+    duration: 2,
+    times: [0, 0.2, 1]
+  }}
+/>
+```
+
+含义：
+
+- 0% 时刻 scale 是 1
+- **20%** 时刻已经达到 1.5（瞬间放大）
+- 100% 时刻回到 1（缓慢缩回）
+
+`times` 数组长度必须等于关键帧数组长度，每个值在 `[0, 1]` 之间，且单调递增。
+
+## repeat：重复
+
+```tsx
+<motion.div
+  animate={{ scale: [1, 1.2, 1] }}
+  transition={{ duration: 0.6, repeat: 3 }}
+/>
+```
+
+`repeat: 3` 表示**额外重复 3 次**，总播放 4 次。
+
+无限循环用 `Infinity`：
+
+```tsx
+<motion.div
+  animate={{ rotate: 360 }}
+  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+/>
+```
+
+注意：`rotate: 360` 不是关键帧——它是单值终点，配合 `repeat: Infinity` 实现无限旋转。每一轮都是 0 → 360，看起来连续。
+
+## repeatType：重复方式
+
+| 值 | 行为 |
+| -- | ---- |
+| `loop`（默认） | 每轮从起点重新开始 |
+| `reverse` | 终点 → 起点 → 终点 → ……来回弹 |
+| `mirror` | 反向播放并保持缓动方向 |
+
+最常用的是 `reverse`——做"呼吸感"动画：
+
+```tsx
+<motion.div
+  animate={{ opacity: [0.4, 1] }}
+  transition={{
+    duration: 1.2,
+    repeat: Infinity,
+    repeatType: 'reverse',
+    ease: 'easeInOut'
+  }}
+/>
+```
+
+效果：透明度在 0.4 ↔ 1 之间无限来回。
+
+## repeatDelay：每轮间隔
+
+```tsx
+<motion.div
+  animate={{ x: [0, 100, 0] }}
+  transition={{
+    duration: 0.8,
+    repeat: Infinity,
+    repeatDelay: 2
+  }}
+/>
+```
+
+每播放完一轮等 2 秒再播下一轮——做"周期性提示"很合适。
+
+## yoyo 已被替换
+
+如果你看到老教程里写：
+
+```tsx
+// ❌ 旧 API（framer-motion 旧版本）
+transition={{ yoyo: Infinity }}
+```
+
+新版 Motion 把它改名为 `repeatType: 'reverse'`：
+
+```tsx
+// ✅ 新 API
+transition={{ repeat: Infinity, repeatType: 'reverse' }}
+```
+
+含义一致——来回播放。
+
+## 经典示例
+
+### 心跳
+
+```tsx
+<motion.div
+  animate={{ scale: [1, 1.1, 1, 1.1, 1] }}
+  transition={{
+    duration: 1.2,
+    repeat: Infinity,
+    times: [0, 0.15, 0.3, 0.45, 1]
+  }}
+>
+  ❤
+</motion.div>
+```
+
+两次快速放大，然后一段静止——更像真实心跳。
+
+### 加载点点点
+
+```tsx
+function Dots() {
+  return (
+    <div className="flex gap-1">
+      {[0, 1, 2].map(i => (
+        <motion.span
+          key={i}
+          className="w-2 h-2 bg-blue-500 rounded-full"
+          animate={{ y: [0, -8, 0] }}
+          transition={{
+            duration: 0.6,
+            repeat: Infinity,
+            delay: i * 0.15
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+三个点错开 0.15s 启动，连起来就是 "波浪"。
+
+### 抖一抖（错误提示）
+
+```tsx
+function ShakeOnError({ error, children }: Props) {
+  return (
+    <motion.div
+      animate={error ? { x: [0, -8, 8, -8, 8, 0] } : {}}
+      transition={{ duration: 0.4 }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+```
+
+`error` 变化时触发抖动；不抖时 `animate={{}}` 不影响其他动画。
+
+### 旋转加载
+
+```tsx
+<motion.svg
+  animate={{ rotate: 360 }}
+  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+>
+  <circle cx="12" cy="12" r="10" stroke="currentColor" fill="none" />
+</motion.svg>
+```
+
+`ease: 'linear'` 重要——默认 `easeInOut` 会让旋转一卡一卡。
+
+### 进度条脉冲
+
+```tsx
+<motion.div
+  className="h-1 bg-blue-500 rounded"
+  animate={{ width: ['0%', '100%'] }}
+  transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+/>
+```
+
+> 注意：这里动画 `width` 会触发 layout，性能不佳。生产环境优先用 `scaleX` + `transform-origin: left`：
+>
+> ```tsx
+> <motion.div
+>   className="h-1 bg-blue-500 origin-left"
+>   animate={{ scaleX: [0, 1] }}
+>   transition={{ duration: 1.5, repeat: Infinity }}
+> />
+> ```
+
+## 缓动作用于每一段
+
+`ease` 不是作用于整个数组，而是作用于**每两个关键帧之间**：
+
+```tsx
+<motion.div
+  animate={{ x: [0, 100, 0] }}
+  transition={{ duration: 1, ease: 'easeOut' }}
+/>
+```
+
+- 0 → 100 用 easeOut
+- 100 → 0 也用 easeOut
+
+想给每段不同缓动，传数组：
+
+```tsx
+transition={{
+  duration: 1,
+  ease: ['easeIn', 'easeOut']  // 第一段 easeIn，第二段 easeOut
+}}
+```
+
+## 陷阱：起始值不在数组里
+
+```tsx
+// ❌ 看起来"跳"一下
+<motion.div
+  initial={{ x: 0 }}
+  animate={{ x: [50, 100, 0] }}
+/>
+```
+
+`initial` 是 0，`animate` 数组首项是 50——动画会从 0 瞬间跳到 50 再开始播放。
+
+修复：把 `initial` 值放进数组首位：
+
+```tsx
+<motion.div
+  initial={{ x: 0 }}
+  animate={{ x: [0, 50, 100, 0] }}
+/>
+```
+
+或省略数组首项让 Motion 用当前值：
+
+```tsx
+<motion.div animate={{ x: [null, 50, 100, 0] }} />
+```
+
+`null` 表示"从当前值开始"。
+
+## 陷阱：repeat 配合 exit
+
+`<AnimatePresence>` 退场时，组件会在当前动画进行到一半时被卸载。如果你在做无限循环并指望 `exit` 被触发：
+
+```tsx
+// ⚠️ exit 仍会播放，但循环不会"先跑完一轮"
+<motion.div
+  animate={{ scale: [1, 1.1, 1] }}
+  transition={{ repeat: Infinity }}
+  exit={{ opacity: 0 }}
+/>
+```
+
+`exit` 优先级高于 `animate`——退场会立刻打断循环，按 exit 配置播放。
+
+## 何时用关键帧、何时拆动画
+
+> 单值终点能搞定的，别用关键帧。
+
+| 场景 | 推荐 |
+| ---- | ---- |
+| 单方向变化（淡入、滑入） | 单值 + transition |
+| 来回（呼吸、闪烁） | 单值 + `repeatType: 'reverse'` |
+| 多个不同状态序列 | 数组关键帧 |
+| 进入 → 停顿 → 退出（不同时长） | 拆成两个动画或用 [`useAnimate`](/motion/motion-use-animate) |
+
+## 小结
+
+- 数组语法是 Motion 表达多关键帧动画的核心——简单、声明式
+- `times` 控制时间分布、`repeat` 控制循环次数、`repeatType` 控制循环方向
+- 优先用 `transform`（`x` / `y` / `scale` / `rotate`）避免触发 layout
+- 起始值不在数组里会"跳"——把 initial 值放进数组首位或用 `null`
+- 复杂的多阶段动画（不同时长、依赖前一段完成）请用 [Variants](/motion/motion-variants) 或 [`useAnimate`](/motion/motion-use-animate)

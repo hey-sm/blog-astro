@@ -1,0 +1,329 @@
+---
+title: 安装与 React 集成
+description: gsap + @gsap/react、useGSAP 生命周期、scope、StrictMode 应对
+---
+
+# 安装与 React 集成
+
+## 安装
+
+```bash
+pnpm add gsap @gsap/react
+```
+
+| 包 | 作用 |
+| -- | ---- |
+| `gsap` | GSAP 核心 + 所有插件（3.13 起全部免费，按需引入） |
+| `@gsap/react` | React 集成包，提供 `useGSAP` Hook |
+
+> 之前的 Club 私有仓库 `gsap-trial` 已不再需要——3.13 后官方包就包含全部插件。
+
+## React 集成的痛点
+
+GSAP 是命令式 API，需要"在合适的时机选 DOM、播放动画、卸载时清理"。直接用 `useEffect` 写：
+
+```tsx filename="❌ 老办法"
+import { useEffect, useRef } from 'react'
+import gsap from 'gsap'
+
+function Box() {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.to('.box', { x: 100, duration: 1 })
+    }, ref)
+
+    return () => ctx.revert()
+  }, [])
+
+  return <div ref={ref}><div className="box" /></div>
+}
+```
+
+问题：
+
+1. 模板代码繁琐（context、revert、ref）
+2. React 18 / 19 StrictMode 会在开发环境**双调用** `useEffect`——动画播两次
+3. 依赖变化时手动管理 cleanup
+4. SSR 环境 `window` 报错
+
+`@gsap/react` 把这些全部封装。
+
+## useGSAP Hook
+
+```tsx filename="✅ 新写法"
+import { useRef } from 'react'
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+
+function Box() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.to('.box', { x: 100, duration: 1 })
+    },
+    { scope: container }
+  )
+
+  return <div ref={container}><div className="box" /></div>
+}
+```
+
+`useGSAP(callback, options)` 自动：
+
+- 包了 `gsap.context()`——所有在内部创建的 tween / timeline 都被收集
+- 卸载时自动 `revert`——清理动画、还原 DOM 样式
+- StrictMode 安全——双调用时第二次会先 revert 第一次再重新创建
+- SSR 安全——服务端跳过执行
+
+### `scope` 的作用
+
+```tsx
+useGSAP(
+  () => {
+    gsap.to('.box', { x: 100 })  // 只匹配 scope 内的 .box
+  },
+  { scope: container }
+)
+```
+
+`scope` 限定 GSAP 选择器的查询范围——避免污染其他组件。两个写法等价：
+
+```tsx
+useGSAP(() => {
+  gsap.to(container.current?.querySelector('.box'), { x: 100 })
+}, { scope: container })
+
+useGSAP(() => {
+  gsap.to('.box', { x: 100 })  // 自动相对 scope
+}, { scope: container })
+```
+
+## dependencies
+
+`useGSAP` 也有依赖数组——和 `useEffect` 一样：
+
+```tsx
+const [value, setValue] = useState(0)
+
+useGSAP(
+  () => {
+    gsap.to('.box', { x: value * 100 })
+  },
+  { scope: container, dependencies: [value] }
+)
+```
+
+`value` 变化时，旧动画被 revert，回调重新执行。
+
+> ⚠️ `dependencies` 默认是 `[]`（仅挂载时执行一次）。需要响应变量请显式传。
+
+## revertOnUpdate
+
+默认行为：依赖变化时 `revert` 旧动画。如果想保留旧动画的最终状态：
+
+```tsx
+useGSAP(
+  () => { /* ... */ },
+  { scope: container, dependencies: [value], revertOnUpdate: false }
+)
+```
+
+适合"动画只触发一次，依赖变化不重置"的场景——很少用。
+
+## contextSafe：在事件回调里安全调用 GSAP
+
+`useGSAP` 内部代码会被 context 收集，但**事件回调里写 GSAP** 不会自动被收集——卸载时不会被清理：
+
+```tsx
+useGSAP(() => {}, { scope: container })
+
+return (
+  <button onClick={() => {
+    gsap.to('.box', { x: 100 })  // ❌ 不在 context 内
+  }}>
+    Click
+  </button>
+)
+```
+
+`useGSAP` 返回一个 `contextSafe` 工具：
+
+```tsx
+const { contextSafe } = useGSAP({ scope: container })
+
+const handleClick = contextSafe(() => {
+  gsap.to('.box', { x: 100 })  // ✅ 包进了 context
+})
+
+return <button onClick={handleClick}>Click</button>
+```
+
+或者在回调里写：
+
+```tsx
+useGSAP(
+  (context, contextSafe) => {
+    const handler = contextSafe!(() => {
+      gsap.to('.box', { x: 100 })
+    })
+
+    const btn = container.current?.querySelector('button')
+    btn?.addEventListener('click', handler)
+
+    return () => btn?.removeEventListener('click', handler)
+  },
+  { scope: container }
+)
+```
+
+> 工程上更推荐**用 React 事件**（`onClick={contextSafe(handler)}`），别在 GSAP 里手动 `addEventListener`。
+
+## 插件注册
+
+ScrollTrigger、SplitText、Draggable 等插件**必须先注册**才能使用：
+
+```tsx
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { SplitText } from 'gsap/SplitText'
+
+gsap.registerPlugin(ScrollTrigger, SplitText)
+```
+
+放在应用入口或某个全局 setup 文件里。**只需注册一次**，全局生效。
+
+> 注册多次没坏处但浪费——单文件里 `registerPlugin` 是幂等的。
+
+## SSR 环境
+
+Next.js App Router / Astro 等 SSR 环境：
+
+- `useGSAP` 内部跳过服务端执行——安全
+- 直接 `import { ScrollTrigger }` 在服务端会因访问 `window` 报错——必须动态 import 或在 Client Component 里使用
+
+```tsx filename="components/ScrollAnim.tsx (Next.js)"
+'use client'
+
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useGSAP } from '@gsap/react'
+import { useRef } from 'react'
+
+gsap.registerPlugin(ScrollTrigger)
+
+export function ScrollAnim() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(() => {
+    gsap.to('.box', {
+      scrollTrigger: { trigger: '.box', start: 'top center' },
+      x: 200,
+    })
+  }, { scope: container })
+
+  return <div ref={container}><div className="box" /></div>
+}
+```
+
+`'use client'` 是关键——确保整个文件不在服务端跑。
+
+## StrictMode 双调用：已被解决
+
+React 18+ 开发模式下，`useEffect` 故意调用两次——暴露副作用清理问题。GSAP 原生写法会因此播两次动画。
+
+`useGSAP` 内部用 `gsap.context()` 收集所有动画，第二次调用前自动 `revert` 第一次——所以**用 `useGSAP` 不需要担心这个问题**。
+
+## 最小工程模板
+
+```tsx filename="components/AnimatedSection.tsx"
+'use client'  // Next.js App Router 需要，Vite / Astro 不需要
+
+import { useRef } from 'react'
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+
+export function AnimatedSection() {
+  const container = useRef<HTMLElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.from('.title', { y: 30, opacity: 0, duration: 0.6 })
+      gsap.from('.text', { y: 20, opacity: 0, duration: 0.5, delay: 0.2 })
+    },
+    { scope: container }
+  )
+
+  return (
+    <section ref={container}>
+      <h2 className="title">标题</h2>
+      <p className="text">正文</p>
+    </section>
+  )
+}
+```
+
+后续所有 GSAP 章节都基于这个模板。
+
+## 陷阱
+
+### 忘记 `useGSAP`，裸用 `useEffect`
+
+```tsx
+// ❌ StrictMode 双调用、卸载不清理
+useEffect(() => {
+  gsap.to('.box', { x: 100 })
+}, [])
+
+// ✅
+useGSAP(() => {
+  gsap.to('.box', { x: 100 })
+}, { scope: container })
+```
+
+### `scope` 与 `useRef` 不匹配
+
+```tsx
+const ref = useRef(null)
+useGSAP(() => {
+  gsap.to('.box', { x: 100 })
+}, { scope: someOtherRef })  // scope 跟 ref 不是同一个
+
+return <div ref={ref}><div className="box" /></div>
+```
+
+`.box` 找不到——查询的是 `someOtherRef` 内的元素。**确保 `scope` 是包裹动画元素的那个 ref**。
+
+### 事件回调里直接调 GSAP 没清理
+
+```tsx
+<button onClick={() => gsap.to('.box', { x: 100 })}>Click</button>
+```
+
+组件卸载时这些动画不会被自动 revert——大型项目会内存泄漏。**用 `contextSafe`**：
+
+```tsx
+const { contextSafe } = useGSAP({ scope: container })
+<button onClick={contextSafe(() => gsap.to('.box', { x: 100 }))}>Click</button>
+```
+
+### 插件没注册就用
+
+```tsx
+gsap.to('.box', {
+  scrollTrigger: { trigger: '.box' },  // ❌ 报错：ScrollTrigger 未注册
+})
+```
+
+每个用到插件的入口文件加 `gsap.registerPlugin(ScrollTrigger)`。也可在全局 setup 文件里统一注册。
+
+## 小结
+
+- 装 `gsap` + `@gsap/react` 两个包
+- 所有 React 中的 GSAP 代码用 `useGSAP` 包起来——免去 StrictMode、cleanup、SSR 三大坑
+- `scope` 用 ref 限定选择器范围
+- 事件回调里的 GSAP 要用 `contextSafe` 包装
+- 插件必须 `gsap.registerPlugin(...)` 注册才能使用
+- Next.js App Router 中用 `'use client'` 标记

@@ -1,0 +1,329 @@
+---
+title: Transition 详解
+description: spring 与 tween 的区别、缓动函数、duration 与 delay 的精确控制
+---
+
+# Transition 详解
+
+`transition` prop 决定动画**怎么走完那段距离**——快慢、节奏、是否回弹。它是 Motion 里第二重要的概念（仅次于 `animate`）。
+
+## 两种动画类型
+
+Motion 内置两类动画引擎：
+
+| 类型 | 触发条件 | 心智 | 配置参数 |
+| ---- | -------- | ---- | -------- |
+| **spring**（弹簧） | 物理属性默认（`x` / `y` / `scale` / `rotate`） | 模拟弹簧，会回弹 | `stiffness` / `damping` / `mass` |
+| **tween**（补间） | 视觉属性默认（`opacity` / `color` / `backgroundColor`） | 按时长 + 缓动曲线均匀过渡 | `duration` / `ease` |
+
+> **零基础类比**：spring 像挂在弹簧上的小球——拉到位置 B 后会左右晃几下才停；tween 像火车进站——按时刻表稳稳停下。
+
+### 默认行为示例
+
+```tsx
+<motion.div animate={{ x: 100, opacity: 1 }} />
+```
+
+- `x: 100` 自动用 spring（默认 stiffness 100、damping 10）
+- `opacity: 1` 自动用 tween（默认 duration 0.3s、ease easeInOut）
+
+这是 Motion 的"反直觉"行为之一——同一个 `animate` 对象里的不同属性可能用不同引擎。
+
+## 显式指定 type
+
+```tsx
+<motion.div
+  animate={{ x: 100 }}
+  transition={{ type: 'tween', duration: 0.5, ease: 'easeOut' }}
+/>
+```
+
+`type` 接受 `'spring'` / `'tween'` / `'inertia'`（拖拽甩出时用）。
+
+## tween 详解
+
+### duration
+
+```tsx
+transition={{ type: 'tween', duration: 0.6 }}
+```
+
+单位是**秒**，不是毫秒。常见取值：
+
+| 场景 | duration |
+| ---- | -------- |
+| 微交互（按钮 hover） | 0.1 ~ 0.2 |
+| 进场 / 退场 | 0.2 ~ 0.4 |
+| 大幅布局变化 | 0.4 ~ 0.6 |
+| 戏剧性的 Hero 动画 | 0.8 ~ 1.5 |
+
+> **经验法则**：超过 0.5 秒的交互动画通常显得慢。如果体感卡，先把 duration 砍一半。
+
+### ease（缓动函数）
+
+缓动函数决定动画**前快后慢、前慢后快、还是匀速**。
+
+```tsx
+transition={{ ease: 'easeOut' }}
+```
+
+#### 字符串预设
+
+| 名字 | 曲线 | 适合 |
+| ---- | ---- | ---- |
+| `linear` | 匀速 | 进度条、loading 转圈 |
+| `easeIn` | 慢→快 | 退场（"加速离开") |
+| `easeOut` | 快→慢 | 进场（"减速到位") |
+| `easeInOut` | 慢→快→慢 | 双向移动 |
+| `circIn` / `circOut` / `circInOut` | 圆弧曲线 | 更柔和 |
+| `backIn` / `backOut` / `backInOut` | 回弹（短暂超过目标值） | 趣味交互 |
+| `anticipate` | 先反向再前进 | 弹性进场 |
+
+> **直觉**：进场用 `easeOut`，退场用 `easeIn`，模拟"物理惯性"——东西从远处滑来时减速，离开时加速。
+
+#### 数组（cubic-bezier 控制点）
+
+```tsx
+transition={{ ease: [0.16, 1, 0.3, 1] }}
+```
+
+四个数字对应 CSS 的 `cubic-bezier(x1, y1, x2, y2)`。可以在 [cubic-bezier.com](https://cubic-bezier.com) 拖拽生成。
+
+常用预设：
+
+```tsx
+// "ease-out-expo" —— 强烈的减速感
+ease: [0.16, 1, 0.3, 1]
+
+// "ease-in-out-quart" —— 平滑的双向曲线
+ease: [0.77, 0, 0.175, 1]
+```
+
+#### 自定义函数
+
+```tsx
+transition={{
+  ease: (t: number) => t * t * t   // ease-in-cubic
+}}
+```
+
+`t` 是 0~1 的进度，函数返回值也是 0~1。冷门但灵活。
+
+### delay
+
+```tsx
+transition={{ duration: 0.4, delay: 0.2 }}
+```
+
+进场前的等待。最常见用途是**错开多个元素**：
+
+```tsx
+{items.map((item, i) => (
+  <motion.div
+    key={item.id}
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ duration: 0.3, delay: i * 0.05 }}
+  />
+))}
+```
+
+每个元素比前一个晚 50ms 进场——但这种手写错开不如用 [Variants 的 staggerChildren](/motion/motion-variants) 优雅。
+
+## spring 详解
+
+spring 不接受 `duration` / `ease`，它的"形状"由物理参数决定。
+
+### 三参数模型
+
+| 参数 | 含义 | 默认 | 调高 |
+| ---- | ---- | ---- | ---- |
+| `stiffness` | 弹簧硬度（越高越快回到目标） | 100 | 动画更快、更"硬" |
+| `damping` | 阻尼（越高越快停下） | 10 | 减少回弹 |
+| `mass` | 物体质量（越大越"沉") | 1 | 启动慢、惯性大 |
+
+### 常见组合
+
+```tsx
+// 干脆利落（无回弹）
+transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+
+// 略带回弹
+transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+
+// 像橡皮筋（明显回弹）
+transition={{ type: 'spring', stiffness: 100, damping: 5 }}
+
+// 沉稳大块头
+transition={{ type: 'spring', stiffness: 100, damping: 20, mass: 3 }}
+```
+
+> **实用直觉**：`damping / (2 * sqrt(stiffness * mass))` 大于 1 就不会回弹。不想回弹时把 `damping` 设到 30+ 一般够了。
+
+### duration 模式（v11+）
+
+不想算物理参数？给 spring 一个目标时长：
+
+```tsx
+transition={{
+  type: 'spring',
+  duration: 0.5,
+  bounce: 0.25  // 0 = 无回弹，1 = 强回弹
+}}
+```
+
+Motion 自动反推 stiffness / damping。**新手推荐这种**——直觉、易调。
+
+### velocity（初始速度）
+
+```tsx
+transition={{ type: 'spring', velocity: 1000 }}
+```
+
+让弹簧"启动时就有冲劲"，常用于拖拽松手后的甩出动画。
+
+## per-property transition
+
+不同属性想用不同 transition？
+
+```tsx
+<motion.div
+  animate={{ x: 100, opacity: 1 }}
+  transition={{
+    x: { type: 'spring', stiffness: 200 },
+    opacity: { duration: 0.2 }
+  }}
+/>
+```
+
+属性名作为 key，对应的对象会**覆盖**外层默认值。
+
+也可以给"默认 transition"再叠一个全局：
+
+```tsx
+transition={{
+  duration: 0.5,            // 默认所有属性
+  opacity: { duration: 0.2 } // opacity 单独覆盖
+}}
+```
+
+## 重复与回放
+
+### repeat
+
+```tsx
+transition={{ duration: 1, repeat: 3 }}      // 总共播 4 次（首次 + 重复 3 次）
+transition={{ duration: 1, repeat: Infinity }} // 无限循环
+```
+
+### repeatType
+
+```tsx
+transition={{
+  duration: 1,
+  repeat: Infinity,
+  repeatType: 'reverse'  // 'loop'（默认）/ 'reverse' / 'mirror'
+}}
+```
+
+| 值 | 效果 |
+| -- | ---- |
+| `loop` | 从头播，跳变到起点 |
+| `reverse` | 来回往返（A→B→A→B） |
+| `mirror` | 同 reverse 但缓动函数也镜像 |
+
+### repeatDelay
+
+```tsx
+transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 1 }}
+```
+
+每次循环之间停 1 秒。心跳、呼吸灯效果常用。
+
+## when 与 delayChildren
+
+进出场协同时用：
+
+```tsx
+transition={{
+  when: 'beforeChildren',  // 父先动完，子再动
+  staggerChildren: 0.1
+}}
+```
+
+完整用法见 [Variants 编排](/motion/motion-variants)。
+
+## 实例对比
+
+来回切换两个按钮的 transition，体感差别立刻显现：
+
+```tsx
+function Demo() {
+  const [active, setActive] = useState(false)
+  return (
+    <button onClick={() => setActive(!active)}>
+      {/* 试试把下面的 transition 换成不同值 */}
+      <motion.div
+        animate={{ x: active ? 200 : 0 }}
+        transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+      />
+    </button>
+  )
+}
+```
+
+建议挨个试：
+
+```tsx
+{ duration: 0.3, ease: 'linear' }                                  // 工业风
+{ duration: 0.3, ease: 'easeOut' }                                 // 自然
+{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }                         // 高级感
+{ type: 'spring', stiffness: 300, damping: 30 }                    // 干脆
+{ type: 'spring', stiffness: 100, damping: 5 }                     // 橡皮筋
+{ type: 'spring', duration: 0.5, bounce: 0.4 }                     // 简单回弹
+```
+
+## 陷阱
+
+### 1. duration 只对 tween 生效
+
+```tsx
+// ❌ 没用——x 是 spring，duration 被忽略
+<motion.div animate={{ x: 100 }} transition={{ duration: 1 }} />
+
+// ✅ 强制 tween
+<motion.div animate={{ x: 100 }} transition={{ type: 'tween', duration: 1 }} />
+
+// ✅ 或用 spring 的 duration 模式
+<motion.div animate={{ x: 100 }} transition={{ type: 'spring', duration: 1, bounce: 0 }} />
+```
+
+### 2. ease 数组别写成 5 个数
+
+```tsx
+ease: [0.16, 1, 0.3, 1]      // ✅ 4 个数 = cubic-bezier
+ease: [0, 0.5, 1]            // ❌ 不是合法 ease
+```
+
+### 3. 退场动画想要不同 transition
+
+`exit` 用的是组件**卸载时的最后一次** transition。如果想给退场单独定时：
+
+```tsx
+<motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  exit={{ opacity: 0, transition: { duration: 0.1 } }}
+  transition={{ duration: 0.4 }}  // 进场 0.4s，退场 0.1s
+/>
+```
+
+把 transition 写在 `exit` 对象**内部**才能覆盖。
+
+## 小结
+
+- 物理属性默认 spring，视觉属性默认 tween——用 `type` 强制切换
+- tween 三件套：`duration` / `ease` / `delay`
+- spring 推荐用 `duration + bounce` 而不是手算 stiffness / damping
+- 不同属性的 transition 用 per-property 配置
+- `repeat: Infinity` + `repeatType: 'reverse'` 是循环动画万能组合

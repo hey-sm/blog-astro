@@ -1,0 +1,462 @@
+---
+title: 拖拽专题
+description: drag prop、约束、useDragControls、Reorder 列表拖拽排序
+---
+
+# 拖拽专题
+
+Motion 把拖拽做成了 `motion.*` 的一个 prop——加一个 `drag` 元素就能拖。再配上约束、回弹、列表自动排序，覆盖了 Web 上 90% 的拖拽场景。
+
+## 最简单的拖拽
+
+```tsx filename="components/Draggable.tsx"
+import { motion } from 'motion/react'
+
+export function Draggable() {
+  return <motion.div drag className="size-24 bg-blue-500 rounded-lg" />
+}
+```
+
+加一个 `drag` prop，鼠标 / 触屏就能把它拖走。松手后会"飘"回原位（Motion 默认带一点弹性）。
+
+### 限制方向
+
+```tsx
+<motion.div drag="x" />  {/* 只能左右拖 */}
+<motion.div drag="y" />  {/* 只能上下拖 */}
+<motion.div drag />      {/* 两个方向 */}
+```
+
+## 拖拽约束
+
+不希望元素被拖到屏幕外。两种约束方式：
+
+### 矩形约束
+
+```tsx
+<motion.div
+  drag
+  dragConstraints={{ left: 0, right: 300, top: 0, bottom: 200 }}
+/>
+```
+
+数值是相对**初始位置**的偏移量，单位 px。`left: 0` 表示不能往左移，`right: 300` 表示最多向右 300px。
+
+### 容器约束
+
+更常见的需求："只能在父容器里拖"。
+
+```tsx filename="components/BoundedDrag.tsx"
+import { useRef } from 'react'
+import { motion } from 'motion/react'
+
+export function BoundedDrag() {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-96 h-64 border-2 border-dashed"
+    >
+      <motion.div
+        drag
+        dragConstraints={containerRef}
+        className="size-16 bg-purple-500 rounded"
+      />
+    </div>
+  )
+}
+```
+
+`dragConstraints={containerRef}` 接收一个 ref——元素被限制在这个容器的边界内。
+
+## 弹性与回弹
+
+### dragElastic：拖出边界时的"橡皮筋"感
+
+```tsx
+<motion.div
+  drag
+  dragConstraints={{ left: 0, right: 300 }}
+  dragElastic={0.2}
+/>
+```
+
+| 值 | 效果 |
+| -- | ---- |
+| `0` | 完全卡死，到边界就不能再拖 |
+| `0.2`（默认） | 能拖出去一点，松手回弹 |
+| `1` | 完全无阻力（等同没约束） |
+
+### dragMomentum：松手后的惯性
+
+```tsx
+<motion.div drag dragMomentum={false} />
+```
+
+默认 `true`——松手后元素会按拖拽速度继续滑一段。`false` 时立即停止。做精确放置（如拖到目标格子）时需要关掉。
+
+### dragTransition：自定义弹回过程
+
+```tsx
+<motion.div
+  drag
+  dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+  dragTransition={{
+    bounceStiffness: 600,
+    bounceDamping: 10,
+  }}
+/>
+```
+
+约束设为 `0` 全部就是"原地弹回"——`bounceStiffness` 越大弹得越快，`bounceDamping` 越小越弹。
+
+## 拖拽时的样式
+
+### whileDrag
+
+```tsx
+<motion.div
+  drag
+  whileDrag={{ scale: 1.1, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
+  whileHover={{ scale: 1.05 }}
+/>
+```
+
+`whileDrag` 在拖拽期间生效，松手后回到 `animate` 状态。是表达"我正在被拖"最直观的方式。
+
+## 监听事件
+
+```tsx
+<motion.div
+  drag
+  onDragStart={(event, info) => console.log('开始', info.point)}
+  onDrag={(event, info) => console.log('拖动中', info.offset)}
+  onDragEnd={(event, info) => console.log('结束', info.velocity)}
+/>
+```
+
+`info` 对象包含：
+
+| 字段 | 含义 |
+| ---- | ---- |
+| `point.x / y` | 当前指针位置（视口坐标） |
+| `delta.x / y` | 自上一帧的位移 |
+| `offset.x / y` | 自拖拽开始的累计位移 |
+| `velocity.x / y` | 当前速度（px/s） |
+
+## 命令式控制：useDragControls
+
+默认情况下，整个 `motion.div` 都是拖拽手柄。如果想**只让特定区域**触发拖拽（比如只能拖标题栏，正文里点击不会触发），用 `useDragControls`。
+
+```tsx filename="components/DraggableModal.tsx"
+import { motion, useDragControls } from 'motion/react'
+
+export function DraggableModal() {
+  const controls = useDragControls()
+
+  return (
+    <motion.div
+      drag
+      dragListener={false}
+      dragControls={controls}
+      className="w-80 bg-white rounded-lg shadow-xl"
+    >
+      <div
+        onPointerDown={e => controls.start(e)}
+        className="p-3 bg-gray-100 cursor-grab active:cursor-grabbing"
+      >
+        标题栏（只能拖这里）
+      </div>
+      <div className="p-4">
+        <p>正文区域。点击这里不会触发拖拽。</p>
+        <button>正常按钮</button>
+      </div>
+    </motion.div>
+  )
+}
+```
+
+关键三个配置：
+
+1. `drag` 仍要保留——开启拖拽能力
+2. `dragListener={false}` 关掉默认的"全元素监听"
+3. `dragControls={controls}` 把控制器交给手动触发
+
+然后在标题栏的 `onPointerDown` 里调 `controls.start(e)` 启动拖拽。
+
+## 列表拖拽排序：`<Reorder>`
+
+Motion 内置了**列表拖拽排序**组件——比 react-dnd / dnd-kit 简单得多，但只能做"上下 / 左右"一维排序。
+
+### 基础示例
+
+```tsx filename="components/SortableList.tsx"
+import { Reorder } from 'motion/react'
+import { useState } from 'react'
+
+const initialItems = [
+  { id: 1, text: '苹果' },
+  { id: 2, text: '香蕉' },
+  { id: 3, text: '橙子' },
+  { id: 4, text: '葡萄' },
+]
+
+export function SortableList() {
+  const [items, setItems] = useState(initialItems)
+
+  return (
+    <Reorder.Group axis="y" values={items} onReorder={setItems}>
+      {items.map(item => (
+        <Reorder.Item
+          key={item.id}
+          value={item}
+          className="p-3 my-2 bg-white rounded shadow cursor-grab"
+        >
+          {item.text}
+        </Reorder.Item>
+      ))}
+    </Reorder.Group>
+  )
+}
+```
+
+要点：
+
+- `Reorder.Group` 是容器，`values` 传当前数组，`onReorder` 接收新顺序
+- `Reorder.Item` 是每一项，`value` 必须是数组里的那个元素本身（不是 `id`）
+- `key` 必须稳定（用 `id`，不要用 `index`）
+- `axis="y"` 上下排序，`axis="x"` 左右排序
+
+### 拖拽手柄
+
+只让某个图标触发拖拽，正文可以正常点击：
+
+```tsx
+import { Reorder, useDragControls } from 'motion/react'
+
+function Item({ item }: { item: Item }) {
+  const controls = useDragControls()
+
+  return (
+    <Reorder.Item
+      value={item}
+      dragListener={false}
+      dragControls={controls}
+      className="flex items-center p-3"
+    >
+      <button
+        onPointerDown={e => controls.start(e)}
+        className="cursor-grab mr-2"
+      >
+        ⋮⋮
+      </button>
+      <span>{item.text}</span>
+    </Reorder.Item>
+  )
+}
+```
+
+### 拖拽时的进出场
+
+`Reorder.Item` 自带布局动画——元素会平滑滑到新位置。配 `<AnimatePresence>` 还能加进出场动画：
+
+```tsx
+import { AnimatePresence, Reorder } from 'motion/react'
+
+<Reorder.Group values={items} onReorder={setItems}>
+  <AnimatePresence>
+    {items.map(item => (
+      <Reorder.Item
+        key={item.id}
+        value={item}
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, x: 100 }}
+      >
+        {item.text}
+      </Reorder.Item>
+    ))}
+  </AnimatePresence>
+</Reorder.Group>
+```
+
+## 陷阱
+
+### 1. `dragConstraints` 引用变化导致约束失效
+
+```tsx filename="❌ 每次渲染都是新对象"
+<motion.div
+  drag
+  dragConstraints={{ left: 0, right: 300 }}
+/>
+```
+
+字面量对象每次渲染是新引用，但 Motion 内部会浅比较，问题不大。**真正坑的是用 ref 时**：
+
+```tsx filename="❌ ref 还没挂载"
+function Wrong() {
+  const ref = useRef(null)
+  // 第一次渲染时 ref.current === null
+  // Motion 会按"无约束"处理
+  return (
+    <div ref={ref}>
+      <motion.div drag dragConstraints={ref} />
+    </div>
+  )
+}
+```
+
+实际表现：第一次拖时没有约束，奇怪地飘走。Motion 在挂载后会重新读取，但首帧已经错了。解决：保证容器先于内部渲染（一般天然成立），或在内容里加 `dragSnapToOrigin={true}` 让它至少能弹回来。
+
+### 2. 滚动容器内的拖拽
+
+垂直滚动列表里又想横向拖卡片——浏览器会优先把上下手势识别为滚动。给可拖卡片设：
+
+```tsx
+<motion.div drag="x" style={{ touchAction: 'pan-y' }} />
+```
+
+`touch-action: pan-y` 告诉浏览器"上下让给滚动，左右我自己处理"。反过来同理用 `pan-x`。
+
+### 3. `Reorder` 用 index 当 key
+
+```tsx filename="❌"
+{items.map((item, i) => (
+  <Reorder.Item key={i} value={item}>{item.text}</Reorder.Item>
+))}
+```
+
+排序后 React 的 reconciler 会复用错误的 DOM 节点，动画错乱。**永远用稳定 id 当 key**。
+
+### 4. 拖拽元素影响布局
+
+`drag` 本质是改 `transform`，但你可能给元素加了 `position: relative` 又调 `top`——这会和 transform 冲突。建议：
+
+- 拖拽元素用 `position: absolute` 或单独的容器
+- 不要在拖拽元素上同时手动改 `x` / `y` / `top` / `left`
+
+## 实战配方
+
+### 可拖拽的悬浮窗
+
+```tsx filename="components/FloatingPanel.tsx"
+import { motion, useDragControls } from 'motion/react'
+
+export function FloatingPanel({ children }: { children: React.ReactNode }) {
+  const controls = useDragControls()
+
+  return (
+    <motion.div
+      drag
+      dragListener={false}
+      dragControls={controls}
+      dragMomentum={false}
+      className="fixed top-20 left-20 w-72 bg-white rounded-xl shadow-2xl"
+    >
+      <div
+        onPointerDown={e => controls.start(e)}
+        className="p-2 bg-gray-100 rounded-t-xl cursor-move select-none"
+      >
+        拖动这里
+      </div>
+      <div className="p-4">{children}</div>
+    </motion.div>
+  )
+}
+```
+
+`dragMomentum={false}` 保证松手立刻停在那——悬浮窗不需要惯性。
+
+### 滑动删除（左滑出现删除按钮）
+
+```tsx filename="components/SwipeToDelete.tsx"
+import { motion, useMotionValue, useTransform } from 'motion/react'
+
+export function SwipeToDelete({
+  children,
+  onDelete,
+}: {
+  children: React.ReactNode
+  onDelete: () => void
+}) {
+  const x = useMotionValue(0)
+  const opacity = useTransform(x, [-100, 0], [1, 0])
+
+  return (
+    <div className="relative overflow-hidden">
+      <motion.div
+        style={{ opacity }}
+        className="absolute inset-y-0 right-0 flex items-center px-4 bg-red-500 text-white"
+      >
+        删除
+      </motion.div>
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -100, right: 0 }}
+        dragElastic={0.1}
+        style={{ x }}
+        onDragEnd={(_, info) => {
+          if (info.offset.x < -80) onDelete()
+        }}
+        className="bg-white p-4"
+      >
+        {children}
+      </motion.div>
+    </div>
+  )
+}
+```
+
+要点：
+
+- `useMotionValue(0)` 跟踪 x 偏移
+- `useTransform` 把 x 映射到删除按钮的 opacity
+- `onDragEnd` 判断是否滑过阈值
+
+### 拖拽到目标区域
+
+```tsx filename="components/DragToTarget.tsx"
+import { useState } from 'react'
+import { motion } from 'motion/react'
+
+export function DragToTarget() {
+  const [dropped, setDropped] = useState(false)
+
+  return (
+    <div className="relative h-64">
+      <div
+        id="target"
+        className={`absolute right-4 bottom-4 size-20 border-2 border-dashed
+          ${dropped ? 'bg-green-200' : ''}`}
+      />
+      <motion.div
+        drag
+        dragSnapToOrigin={!dropped}
+        onDragEnd={(_, info) => {
+          const target = document.getElementById('target')!.getBoundingClientRect()
+          const inside =
+            info.point.x > target.left &&
+            info.point.x < target.right &&
+            info.point.y > target.top &&
+            info.point.y < target.bottom
+          setDropped(inside)
+        }}
+        className="size-16 bg-blue-500 rounded"
+      />
+    </div>
+  )
+}
+```
+
+`dragSnapToOrigin` 控制松手后是否回弹原位——拖到目标区域就让它停下，否则弹回。
+
+## 小结
+
+- `drag` 是最简单的入口，加一个 prop 就能拖
+- `dragConstraints` 限制范围（数值或 ref 容器）
+- `whileDrag` 表达"被拖中"的样式状态
+- `useDragControls` 实现"指定手柄"模式
+- `<Reorder>` 一行代码做列表拖拽排序——首选方案
+- 移动端需要 `touch-action` 解决方向冲突
+- `useMotionValue` + `useTransform` 能做"滑动联动其他元素"的高级效果

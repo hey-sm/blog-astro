@@ -1,0 +1,333 @@
+---
+title: Variants 编排
+description: 用命名状态组织复杂动画，父子传递、staggerChildren 与序列编排
+---
+
+# Variants 编排
+
+到目前为止，我们都是在 `motion.*` 上直接写 `initial={{ ... }}` `animate={{ ... }}`。当一个组件有多个状态、或多个子元素需要同步时，这种"内联值"会迅速变得难以维护。
+
+**Variants（变体）** 把动画的"状态"提取成命名对象——你只在外部切换名字，子元素自动响应。
+
+## 一、第一个 Variants
+
+```tsx
+import { motion } from 'motion/react'
+
+const variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 },
+}
+
+function Card() {
+  return (
+    <motion.div
+      variants={variants}
+      initial="hidden"
+      animate="visible"
+    >
+      Hello
+    </motion.div>
+  )
+}
+```
+
+`initial` / `animate` / `exit` 不再写对象，而是写**状态名字符串**。Motion 自动从 `variants` 表里查值。
+
+好处一眼能看出来：
+
+- 状态命名清晰（`hidden` / `visible` 比一堆 `0` / `20` 更有语义）
+- 动画与组件解耦——`variants` 可以挪到外部、被多个组件复用
+
+## 二、父子传递
+
+Variants 的杀手锏是**自动向下传播**。父元素切换状态时，子元素的同名 variant 也会同步触发：
+
+```tsx
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 },
+}
+
+function List() {
+  return (
+    <motion.ul
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      <motion.li variants={itemVariants}>项一</motion.li>
+      <motion.li variants={itemVariants}>项二</motion.li>
+      <motion.li variants={itemVariants}>项三</motion.li>
+    </motion.ul>
+  )
+}
+```
+
+注意子元素**没有写 `initial` / `animate`**——它们继承父元素的状态。父切到 `visible`，每个子也切到 `visible`。
+
+## 三、`staggerChildren`：错峰动画
+
+子元素同时动起来观感不好——交错（stagger）一下立刻有节奏：
+
+```tsx
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,  // 每个子相隔 0.1s
+    },
+  },
+}
+```
+
+子元素按 DOM 顺序依次播放，每个比前一个晚 0.1 秒。配合 `delayChildren` 还能让首个子也延后：
+
+```tsx
+visible: {
+  opacity: 1,
+  transition: {
+    delayChildren: 0.2,     // 第一个子延后 0.2s
+    staggerChildren: 0.1,   // 后续每个再相隔 0.1s
+  },
+},
+```
+
+### 反向交错
+
+`staggerDirection: -1` 让最后一个子先动：
+
+```tsx
+hidden: {
+  opacity: 0,
+  transition: {
+    staggerChildren: 0.05,
+    staggerDirection: -1,
+  },
+},
+```
+
+退场时常用——倒序消失视觉上更"干净"。
+
+## 四、`when`：父子先后顺序
+
+默认父子动画**同时**进行。`when` 可以控制先后：
+
+```tsx
+visible: {
+  opacity: 1,
+  transition: {
+    when: 'beforeChildren',  // 父先动完再轮到子
+    staggerChildren: 0.1,
+  },
+},
+```
+
+| 值 | 含义 |
+| -- | ---- |
+| `'beforeChildren'` | 父动画完成后再触发子 |
+| `'afterChildren'` | 子全部完成后再触发父 |
+| 不写 | 父子同时 |
+
+退场（`exit`）想"子先消失，再消失父容器"就用 `afterChildren`。
+
+## 五、动态 Variants：函数形式
+
+Variant 可以是**函数**——接收 `custom` prop 返回不同的值：
+
+```tsx
+const variants = {
+  visible: (i: number) => ({
+    opacity: 1,
+    transition: { delay: i * 0.1 },
+  }),
+  hidden: { opacity: 0 },
+}
+
+function List({ items }: { items: string[] }) {
+  return (
+    <motion.ul initial="hidden" animate="visible">
+      {items.map((text, i) => (
+        <motion.li
+          key={text}
+          custom={i}
+          variants={variants}
+        >
+          {text}
+        </motion.li>
+      ))}
+    </motion.ul>
+  )
+}
+```
+
+每个 `<motion.li>` 都把自己的索引 `i` 作为 `custom` 传入，函数 variant 接住生成不同的 `delay`。
+
+> 用 `custom + 函数 variants` 还是 `staggerChildren`？只想要简单的等距错峰用 `staggerChildren`；想根据数据动态计算（比如根据距离中心的距离 delay）用函数 variants。
+
+## 六、多状态切换
+
+Variants 不止 `hidden`/`visible` 两种——你可以写任意多个：
+
+```tsx
+const buttonVariants = {
+  idle:    { scale: 1, backgroundColor: '#3b82f6' },
+  hover:   { scale: 1.05, backgroundColor: '#2563eb' },
+  tap:     { scale: 0.95 },
+  loading: { scale: 1, backgroundColor: '#9ca3af' },
+}
+
+function Submit({ loading }: { loading: boolean }) {
+  return (
+    <motion.button
+      variants={buttonVariants}
+      animate={loading ? 'loading' : 'idle'}
+      whileHover="hover"
+      whileTap="tap"
+    >
+      {loading ? '提交中...' : '提交'}
+    </motion.button>
+  )
+}
+```
+
+`whileHover` / `whileTap` 也支持 variant 名字符串。
+
+## 七、数组 variant：组合多个状态
+
+`animate` / `whileHover` 等可以接收**字符串数组**，多个 variant 合并生效：
+
+```tsx
+<motion.div
+  variants={{
+    visible: { opacity: 1 },
+    big: { scale: 1.2 },
+  }}
+  animate={['visible', 'big']}
+/>
+```
+
+后面的覆盖前面的同名属性。
+
+## 八、嵌套 Variants
+
+子组件本身也是 `motion.*` 时，孙级会继续传播：
+
+```tsx
+function Card() {
+  return (
+    <motion.div variants={cardVariants}>     {/* 父 */}
+      <motion.h2 variants={titleVariants}>   {/* 子 */}
+        Title
+      </motion.h2>
+      <motion.div variants={contentVariants}>{/* 子 */}
+        <motion.p variants={textVariants}>   {/* 孙 */}
+          paragraph
+        </motion.p>
+      </motion.div>
+    </motion.div>
+  )
+}
+```
+
+整棵树同步切换——只要顶层 `animate="visible"`，所有后代的同名 variant 都会触发。
+
+## 九、陷阱
+
+### 中间层不想被 variants 控制
+
+如果你只想让父和孙触发动画，中间的 `motion.div` 不参与，它**仍会"传播"**。解法：让那个中间元素显式声明一个空 variant 或不写 `variants`。
+
+实际上更常见的做法——传播到了**没有 `variants` prop 的 motion 元素**会停下，传播树会断在那里。但如果你给中间层声明了 `variants`，传播会继续。
+
+### `staggerChildren` 不生效
+
+最常见原因：
+
+1. 子元素没用 `motion.*`——只有 motion 元素才参与传播
+2. 子元素写了自己的 `initial="..."` / `animate="..."` 字符串——会断开继承
+3. 父和子的 variant **名字必须相同**（都叫 `visible`），不然子收不到对应状态
+
+### 与 `whileHover` 等手势的优先级
+
+手势 prop 会覆盖 `animate`。父切到 variant A，子鼠标悬浮触发 variant B，子显示 B。鼠标离开后回到 A。这个设计正好——手势是"局部临时态"。
+
+### 函数 variant 的 `custom` 必须传
+
+```tsx
+<motion.li variants={variants} />          // ❌ 函数 variant 收不到 custom
+<motion.li variants={variants} custom={i} />  // ✅
+```
+
+漏了 `custom` 会报错或行为异常。
+
+## 十、实战：序列入场
+
+把上面这些拼成一个完整的"卡片入场"模式：
+
+```tsx filename="components/SectionReveal.tsx"
+import { motion } from 'motion/react'
+
+const container = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      delayChildren: 0.1,
+      staggerChildren: 0.08,
+    },
+  },
+}
+
+const item = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring', stiffness: 300, damping: 24 },
+  },
+}
+
+export function SectionReveal({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.section
+      variants={container}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: '-80px' }}
+    >
+      {React.Children.map(children, (child, i) => (
+        <motion.div key={i} variants={item}>
+          {child}
+        </motion.div>
+      ))}
+    </motion.section>
+  )
+}
+```
+
+用法：
+
+```tsx
+<SectionReveal>
+  <h2>标题</h2>
+  <p>第一段</p>
+  <p>第二段</p>
+</SectionReveal>
+```
+
+进入视口时，标题、第一段、第二段依次弹入——零散调用方完全不感知动画细节。
+
+## 小结
+
+- Variants 把"状态"命名化，比内联对象更易读、易复用；
+- 父切状态，子树同名 variant 自动传播——免去手动同步；
+- `staggerChildren` / `delayChildren` / `when` 控制子元素的节奏与先后；
+- 函数形式的 variant + `custom` 实现根据数据动态计算的动画；
+- 父子的 variant **必须同名**才能继承——这是大部分 stagger 不生效的根因。

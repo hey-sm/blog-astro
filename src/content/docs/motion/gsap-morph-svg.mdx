@@ -1,0 +1,249 @@
+---
+title: MorphSVG
+description: SVG 形状自动变形——圆变星、Logo 变换、节点不匹配也能 morph
+---
+
+# MorphSVG
+
+`MorphSVGPlugin` 让一个 SVG 形状**平滑变形**成另一个——圆 → 星形、菜单 → 关闭图标、A 字 → B 字。
+
+> 这个插件在 3.13 起免费可商用——之前是 Club GSAP 独享，且**它是 GSAP 最受欢迎的付费插件之一**。
+
+## 与 Motion `d` 插值的差异
+
+Motion 的 `<motion.path animate={{ d: '...' }}>` 也能做形变，但要求**两个 path 的命令数量与类型完全一致**——这通常不成立。
+
+MorphSVG 自动处理"命令数不匹配"的情况——它会智能补点、对齐节点、按视觉相似度匹配，结果是任意两个形状都能丝滑变形。
+
+## 安装
+
+```tsx
+import gsap from 'gsap'
+import { MorphSVGPlugin } from 'gsap/MorphSVGPlugin'
+
+gsap.registerPlugin(MorphSVGPlugin)
+```
+
+## 第一个示例
+
+```tsx filename="components/MorphDemo.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { MorphSVGPlugin } from 'gsap/MorphSVGPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(MorphSVGPlugin)
+
+export function MorphDemo() {
+  const container = useRef<SVGSVGElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.to('.shape', {
+        morphSVG: '#target',
+        duration: 1.5,
+        repeat: -1,
+        yoyo: true,
+        ease: 'power2.inOut',
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <svg ref={container} viewBox="0 0 200 200">
+      <path className="shape" d="M 50 50 L 150 50 L 150 150 L 50 150 Z" fill="#3b82f6" />
+      <path id="target" d="M 100 20 L 180 80 L 150 170 L 50 170 L 20 80 Z" fill="none" stroke="none" />
+    </svg>
+  )
+}
+```
+
+`.shape`（矩形）变形到 `#target`（五边形）——节点数不同，MorphSVG 自动桥接。
+
+## morphSVG 的值
+
+```tsx
+gsap.to('.shape', { morphSVG: '#target' })           // 选择器（SVG 元素或 path）
+gsap.to('.shape', { morphSVG: 'M 0 0 L 100 100 Z' }) // 直接 path 字符串
+gsap.to('.shape', { morphSVG: { shape: '#target', shapeIndex: 2 } })  // 对象配置
+```
+
+## 配置对象
+
+```tsx
+morphSVG: {
+  shape: '#target',
+  shapeIndex: 'auto',     // 节点对齐方式
+  type: 'linear',         // 'linear'（直线插值）/ 'rotational'（绕中心旋转）
+  origin: '50% 50%',      // type='rotational' 时的旋转中心
+  map: 'size',            // 'size' / 'position' / 'complexity' 自动匹配方式
+  precompile: 'log',      // 打印对齐结果，调试用
+}
+```
+
+### shapeIndex
+
+控制源 path 的"起点"在目标 path 的哪个位置开始对齐——影响变形过程的视觉路径。
+
+```tsx
+shapeIndex: 'auto'    // 自动选择最接近的（默认）
+shapeIndex: 0         // 数字 0~N
+shapeIndex: 'log'     // 打印推荐值（调试）
+```
+
+不确定时先用 `'auto'`，效果不理想再手动指定。
+
+### type: 'rotational'
+
+让形变沿圆弧（绕中心）而不是直线——某些形状这样更自然：
+
+```tsx
+morphSVG: {
+  shape: '#target',
+  type: 'rotational',
+  origin: '50% 50%',
+}
+```
+
+## 实战：菜单图标 ↔ 关闭图标
+
+经典效果——汉堡菜单按钮变成 X：
+
+```tsx filename="components/MenuButton.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { MorphSVGPlugin } from 'gsap/MorphSVGPlugin'
+import { useRef, useState } from 'react'
+
+gsap.registerPlugin(MorphSVGPlugin)
+
+const HAMBURGER = 'M 4 6 L 20 6 M 4 12 L 20 12 M 4 18 L 20 18'
+const CLOSE     = 'M 5 5 L 19 19 M 12 12 L 12 12 M 5 19 L 19 5'
+
+export function MenuButton() {
+  const ref = useRef<SVGPathElement>(null)
+  const [open, setOpen] = useState(false)
+
+  useGSAP(() => {
+    if (!ref.current) return
+    gsap.to(ref.current, {
+      morphSVG: open ? CLOSE : HAMBURGER,
+      duration: 0.4,
+      ease: 'power2.inOut',
+    })
+  }, { dependencies: [open] })
+
+  return (
+    <svg viewBox="0 0 24 24" onClick={() => setOpen(!open)}>
+      <path ref={ref} d={HAMBURGER} stroke="black" strokeWidth="2" fill="none" />
+    </svg>
+  )
+}
+```
+
+按钮点击时三条线变成 X——比 CSS rotation hack 更自然。
+
+## 多形状循环
+
+```tsx
+const shapes = ['#circle', '#triangle', '#square', '#star']
+
+useGSAP(() => {
+  const tl = gsap.timeline({ repeat: -1 })
+  shapes.forEach(s => {
+    tl.to('.shape', { morphSVG: s, duration: 1.5, ease: 'power2.inOut' })
+      .to({}, { duration: 0.5 })  // 停留 0.5s
+  })
+}, { scope: container })
+```
+
+循环切换多个形状——展示页常用。
+
+## precompile：性能优化
+
+每次创建变形动画时，MorphSVG 都要计算"哪个节点对应哪个节点"——复杂形状这步会消耗时间。生产环境可以**预计算**：
+
+```tsx
+// 1. 开发时打印结果
+morphSVG: { shape: '#target', precompile: 'log' }
+// 控制台会输出类似 [{shape: '...', shapeIndex: 3, map: 'size'}]
+
+// 2. 把结果填回代码
+morphSVG: {
+  shape: '#target',
+  shapeIndex: 3,
+  precompile: ['Mxxx Lxxx Zxxx', 'Mxxx Lxxx Zxxx'],  // 预算好的 path
+}
+```
+
+复杂动画在低端设备上启动时不再卡顿。
+
+## convertToPath：把基础形状变成 path
+
+`<rect>` / `<circle>` / `<ellipse>` / `<polygon>` / `<line>` 不能直接 morph——MorphSVG 提供工具方法转换：
+
+```tsx
+MorphSVGPlugin.convertToPath('rect, circle, polygon')
+```
+
+把所有匹配的基础形状元素**原地替换**为等效的 `<path>`，之后就能 morph。
+
+## 与 ScrollTrigger 配合
+
+滚动时形状变换——叙事页常用：
+
+```tsx
+gsap.to('.shape', {
+  morphSVG: '#stage2',
+  scrollTrigger: {
+    trigger: '.section',
+    start: 'top center',
+    end: 'bottom center',
+    scrub: true,
+  },
+})
+```
+
+## 陷阱
+
+### 目标 path 必须在 DOM 中
+
+```tsx
+morphSVG: '#target'   // 必须 DOM 中有 <path id="target" />
+```
+
+目标 path 可以 `display: none` 或 `stroke: none`——只是用来"取 d 值"，不用显示。
+
+### 形状差异太大时变形丑
+
+凭直觉判断：圆 ↔ 椭圆很自然；圆 ↔ 复杂 Logo 会出现"扭曲过渡"。复杂场景建议把变化拆成多步（中间设计过渡形状）。
+
+### 节点数差距很大时性能
+
+MorphSVG 自动补点——一边 5 个节点、另一边 200 个节点时会补 195 个点。复杂场景考虑提前在矢量软件里把两边节点数对齐。
+
+### 闭合性必须一致
+
+`Z` 结尾的闭合 path 与非闭合 path 之间 morph 会出问题——形态都不一样。统一闭合或都不闭合。
+
+## 与 Motion `<motion.path>` 的对比
+
+| 场景 | Motion d 插值 | GSAP MorphSVG |
+| ---- | ------------- | ------------- |
+| 节点数相同 | ⭐ 简单 | 也行但杀鸡用牛刀 |
+| 节点数不同 | ❌ 跳变 | ⭐ 自动桥接 |
+| 智能旋转对齐 | ❌ | ⭐ `shapeIndex` |
+| 性能优化 | 无 | ⭐ `precompile` |
+| 包大小 | 0（已包含） | +9 KB |
+
+**简单形态选 Motion，复杂形变选 MorphSVG**——分工清晰。
+
+## 小结
+
+- MorphSVG 让 SVG 形状自动平滑变形——节点数不一致也行
+- `morphSVG: '#target'` 是最简单的用法
+- `type: 'rotational'` 让某些形状变得更自然
+- `precompile` 预计算优化复杂场景性能
+- `convertToPath` 把 `<rect>` / `<circle>` 等基础形状转 `<path>`
+- 菜单 ↔ 关闭、状态图标过渡的标准实现

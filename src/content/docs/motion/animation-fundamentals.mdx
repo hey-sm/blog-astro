@@ -1,0 +1,199 @@
+---
+title: 动画基础概念
+description: 关键帧、缓动、帧率、合成层——动画背后的底层原理
+---
+
+# 动画基础概念
+
+不论用 CSS、Motion 还是 GSAP，底层原理都一样。先把这些概念吃透，后面看任何 API 都"一眼看穿"。
+
+## 动画 = 随时间变化的属性
+
+一切动画的本质：**某个属性的值，随着时间从 A 变到 B**。
+
+```
+时间轴：  0ms  ────────────────►  300ms
+属性值：  0px                      100px
+```
+
+剩下的全是细节：
+
+- **从 A 到 B 怎么走**——线性、加速、减速、回弹？这是**缓动**。
+- **走多久**——`duration`。
+- **什么时候开始**——`delay`。
+- **走完之后**——停下、循环、反向？
+
+## 关键帧（Keyframes）
+
+最简单的动画只有起点（`from`）和终点（`to`）。**关键帧**让你在中间插任意多个"路标"：
+
+```
+时间：  0%       25%      50%      75%      100%
+透明度：0   →    0.5  →   1    →   0.8  →   0
+```
+
+CSS 写法：
+
+```css
+@keyframes fade-pulse {
+  0%   { opacity: 0;   }
+  50%  { opacity: 1;   }
+  100% { opacity: 0;   }
+}
+```
+
+Motion 用数组表达同一件事：
+
+```tsx
+<motion.div animate={{ opacity: [0, 1, 0] }} transition={{ duration: 1 }} />
+```
+
+数组每一项就是一帧——默认平均分布在时间轴上。
+
+## 缓动函数（Easing）
+
+如果不指定缓动，属性按线性变化——视觉上会显得**机械、廉价**。现实世界中的物体几乎都有"启动慢、过程匀、收尾慢"的特点，这就是缓动函数的作用。
+
+| 名字 | 视觉感受 | 用途 |
+| ---- | -------- | ---- |
+| `linear` | 匀速 | 进度条、加载圈 |
+| `ease-in` | 慢启动、快结束 | 元素离场 |
+| `ease-out` | 快启动、慢结束 | 元素入场（最常用） |
+| `ease-in-out` | 两头慢、中间快 | 来回切换 |
+| `cubic-bezier(...)` | 自定义曲线 | 设计师指定 |
+| `spring`（物理弹簧） | 自然回弹 | 拖拽、按钮按下 |
+
+**一个简单的判断**：用户期待"东西飞进来停住"——选 `ease-out`；"东西消失走掉"——选 `ease-in`；"按一下回弹"——选 spring。
+
+可视化工具：[easings.net](https://easings.net) 把常用曲线都画出来了，挑曲线时打开看一眼最快。
+
+## 时长（Duration）
+
+| 场景 | 推荐时长 |
+| ---- | -------- |
+| 按钮悬浮、聚焦反馈 | 100–150ms |
+| 小元素出现 / 消失 | 200–300ms |
+| Modal / Drawer 进出 | 250–400ms |
+| 页面切换 | 300–500ms |
+| 大场景过渡、营销视效 | 500–1000ms |
+
+**口诀**：能用 200ms 完成的别用 400ms。动画过长会让用户觉得"卡"，哪怕实际上没卡。
+
+## 帧率：为什么是 60fps
+
+屏幕每秒刷新约 60 次（高刷屏 120 次）。一帧的预算是 **16.6ms**——浏览器要在这 16.6ms 内完成"算出下一帧 + 画到屏幕"。
+
+超过预算就会**掉帧**——动画看起来一顿一顿的，俗称"卡"。
+
+```
+理想：     │░│░│░│░│░│░│░│░│░│░│  每 16.6ms 一帧
+卡顿：     │░│  │░│  │░│  │░│      偶尔丢帧
+```
+
+**60fps 不是性能目标，是合格线**。掉到 30fps 用户立刻能感觉到。
+
+## 合成层与"廉价"属性
+
+不是所有 CSS 属性都同样便宜。浏览器渲染一帧分三步：
+
+```
+1. Layout（布局） → 算每个元素的位置和大小  ←  最贵
+2. Paint（绘制） → 画颜色、阴影、文字       ←  中等
+3. Composite（合成） → 把图层叠在一起      ←  最便宜
+```
+
+**只触发 Composite 的属性可以被 GPU 加速**，跑得飞快。它们就两个：
+
+- `transform`（`translate` / `scale` / `rotate` / `skew`）
+- `opacity`
+
+其它属性会引发更上层的步骤：
+
+| 属性 | 触发到哪一步 |
+| ---- | ------------ |
+| `width` / `height` / `top` / `left` / `margin` | Layout（全套重来） |
+| `color` / `background` / `box-shadow` | Paint |
+| `transform` / `opacity` | Composite ✅ |
+
+**结论**：能用 `transform` 做的就别动 `top` / `left`；能用 `opacity` 别动 `visibility`。
+
+```css
+/* ❌ 慢——会触发 Layout */
+.move { transition: left 0.3s; }
+.move:hover { left: 100px; }
+
+/* ✅ 快——只触发 Composite */
+.move { transition: transform 0.3s; }
+.move:hover { transform: translateX(100px); }
+```
+
+这是为什么 Motion 和 GSAP 都**默认操作 transform**——它们已经替你做了正确选择。
+
+## will-change 提示
+
+如果你确定某个元素**马上要动画**，可以提前告诉浏览器把它升级成独立图层：
+
+```css
+.card {
+  will-change: transform;
+}
+```
+
+但**别滥用**——每多一个图层就多一份内存开销。只在性能确实有问题的元素上加，加完动画结束建议移除。
+
+## 减少动画偏好
+
+部分用户（前庭功能障碍、晕动症、专注力相关需求）会在系统设置里开启"减少动画"。CSS 能直接读到：
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+Motion 也提供 `useReducedMotion` hook——后面具体章节再讲。**做动画时把这个考虑进去，是基本的无障碍素养**。
+
+## 一些"小白容易踩"的概念
+
+### `transform` 是会覆盖的
+
+```css
+.a { transform: translateX(10px); }
+.a { transform: scale(1.1); }
+/* translateX 被覆盖了 */
+```
+
+要同时设两个值，写在一起：
+
+```css
+.a { transform: translateX(10px) scale(1.1); }
+```
+
+Motion 把这点抹平了——`x` / `scale` / `rotate` 分别是独立的 prop，框架内部合并：
+
+```tsx
+<motion.div animate={{ x: 10, scale: 1.1 }} />
+```
+
+### `display: none` 不能被动画
+
+CSS 没法在 `display: none` 和 `display: block` 之间补间——元素直接消失或出现。要做"淡出后再消失"得分两步：先动画 `opacity` 到 0，动画结束再设 `display: none`。
+
+Motion 的 `<AnimatePresence>` 就是替你管这件事的。
+
+### `height: auto` 不能被动画
+
+CSS 没法把"自适应高度"作为终点——浏览器需要一个数字。要做"展开"动画，要么提前测量元素高度，要么用 Motion 的 `layout` prop（它会自动测量）。
+
+## 小结
+
+- 动画 = 属性 + 时间 + 缓动
+- 缓动函数让动画"自然"，零基础先用 `ease-out` 入场、`ease-in` 离场
+- 一帧预算 16.6ms，掉到 30fps 立刻被感知
+- **优先动画 `transform` 和 `opacity`**——它们走 GPU 合成
+- 尊重 `prefers-reduced-motion`
+
+下一章：[如何选型](/motion/choosing)——CSS / Motion / GSAP 到底用哪个。

@@ -1,0 +1,137 @@
+---
+title: 如何选型
+description: CSS、Motion、GSAP、react-spring 的决策树、包大小、能力边界对比
+---
+
+# 如何选型
+
+动画方案不是越强越好。选错工具会带来两类痛：**动效达不到设计稿**或**为了一个简单效果引入了几十 KB 包体积**。
+
+这一章给你一张决策图，让你在动手前 30 秒内做出选择。
+
+## 决策树
+
+```
+你的动画需求是什么？
+│
+├── 状态切换 / hover / 简单进出
+│   └─→ ✅ CSS / Tailwind   （包体: 0）
+│
+├── 组件化的进出场、布局变化、手势
+│   └─→ ✅ Motion (motion/react)   （包体: ~40 KB gzip）
+│
+├── 复杂时间轴、滚动叙事、SVG morph、文字逐字
+│   └─→ ✅ GSAP + 插件   （包体: ~25 KB 起，按插件累加）
+│
+├── 物理弹簧手感（拖拽回弹、菜单展开）
+│   └─→ ✅ Motion 默认 spring 已够；极致自然感选 react-spring
+│
+└── 包体积极致敏感（落地页 / 嵌入 widget）
+    └─→ ✅ Motion One   （包体: ~5 KB）
+```
+
+## 四套方案一图对比
+
+| 维度 | CSS / Tailwind | Motion | GSAP | react-spring |
+| ---- | -------------- | ------ | ---- | ------------- |
+| 包体积 (gzip) | 0 | ~40 KB | ~25–80 KB | ~25 KB |
+| 心智模型 | 声明式 | 声明式（组件 prop） | 命令式（时间轴） | 物理弹簧（Hook） |
+| 学习曲线 | 低 | 低 | 中 | 中 |
+| 进出场 | `@keyframes` 手写 | ⭐ `<AnimatePresence>` | 配合 React 较繁 | `useTransition` |
+| 布局动画 (FLIP) | ❌ | ⭐ `layout` prop | `Flip` 插件 | ❌ |
+| 共享元素动画 | ❌ | ⭐ `layoutId` | `Flip` 可实现 | ❌ |
+| 时间轴编排 | ❌ | 通过 `delay` / variants | ⭐ `gsap.timeline()` | 链式 chain |
+| 滚动驱动 | `scroll-timeline` 实验性 | ⭐ `useScroll` | ⭐ ScrollTrigger | 需手写 |
+| SVG 路径动画 | 受限 | `motion.path` | ⭐ DrawSVG / MorphSVG | 受限 |
+| 文字逐字 / 逐行 | 难 | 手动拆分 | ⭐ SplitText | 手动拆分 |
+| 手势（拖拽 / 长按） | ❌ | ⭐ `drag` / `whileTap` | Draggable 插件 | `useDrag` |
+| 物理感 | ❌ | spring 默认 | InertiaPlugin | ⭐ 整库基于物理 |
+| TypeScript 体验 | N/A | ⭐ 优秀 | 良好 | 良好 |
+| 与 React 协作 | ⭐ 完美 | ⭐ 为 React 而生 | 需 `useGSAP` | ⭐ 优秀 |
+| 服务端渲染 | ⭐ 完美 | ⭐ 良好 | 需手动处理 | 良好 |
+
+⭐ 表示该项是这个工具的强项。
+
+## 场景到方案的映射
+
+下面是常见 UI 场景的推荐组合：
+
+| 场景 | 推荐 |
+| ---- | ---- |
+| 按钮 hover、链接颜色过渡 | CSS / Tailwind |
+| 加载骨架屏的脉冲 | CSS / Tailwind |
+| Modal / Drawer 进出场 | Motion `<AnimatePresence>` |
+| Toast / 通知列表 | Motion `<AnimatePresence>` + `layout` |
+| Tab 切换的下划线滑动 | Motion `layoutId` |
+| 列表拖拽排序 | Motion `<Reorder>` |
+| 卡片点击放大到详情页（共享元素） | Motion `layoutId` |
+| 路由切换淡入淡出 | Motion `<AnimatePresence mode="wait">` |
+| 表单字段错误抖动 | Motion `keyframes` 数组 |
+| 滚动视差 Hero | Motion `useScroll` 或 GSAP ScrollTrigger |
+| 滚动叙事（pin + 多步骤） | ⭐ GSAP ScrollTrigger（Motion 力不从心） |
+| 营销页文字逐字浮现 | ⭐ GSAP SplitText |
+| Logo 描边动画 | ⭐ GSAP DrawSVG |
+| 形状渐变（圆形→星形） | ⭐ GSAP MorphSVG |
+| 沿曲线移动 | ⭐ GSAP MotionPath |
+| 数字滚动到目标值 | Motion+ `<AnimateNumber>` 或 GSAP TextPlugin |
+| 物理拖拽甩出 | ⭐ GSAP Draggable + Inertia |
+
+## 何时混用
+
+Motion 和 GSAP 不是二选一，可以在同一个项目里**分场景共存**：
+
+- 业务交互、列表、进出场 → Motion
+- 营销首屏、滚动叙事、SVG 动效 → GSAP
+
+二者管理的 DOM 互不交叉就没问题。**同一个元素不要被两个库同时驱动**——它们都在写 `style.transform`，会互相覆盖。
+
+## 三个反直觉的事实
+
+### 1. 包体积不是决定性因素
+
+很多人因为"GSAP 大"就避开它。其实：
+
+- GSAP 核心 `gsap` 约 **25 KB gzip**，比 Motion 还小
+- 大头在插件，按需引入即可
+- 真正大的是 ScrollSmoother + ScrollTrigger + SplitText 三件套，加起来约 60 KB——但能换来 Motion 做不到的效果，对营销页值得
+
+### 2. CSS 不是"低端"方案
+
+只要状态切换能用 `:hover` / `data-state` / 组件 className 表达，CSS 就是最优解：
+
+- 0 JS，浏览器原生，性能最好
+- 服务端渲染 0 闪烁
+- 用户禁用 JS 仍能工作
+
+**先问能不能用 CSS，再考虑 JS 库。**
+
+### 3. Motion 已经能做 80% 的 GSAP 场景
+
+`useScroll` + `useTransform` + `whileInView` 组合起来，能覆盖大多数滚动动画。Motion 做不了的主要是：
+
+- 时间轴的标签 / 相对位置编排
+- SVG 路径绘制 / 形变
+- 文字按字符拆分动画
+- 滚动 pin 与多阶段 trigger
+
+如果你的项目不涉及上述场景，**只用 Motion 就够了**，不必引入 GSAP。
+
+## 学习路径建议
+
+零基础读者推荐顺序：
+
+1. **先吃透 CSS 动画**（[过渡与动画](/css/transitions-animations)）——所有库都在它之上
+2. **学 Motion**：覆盖 90% 业务场景，API 直观
+3. **按需学 GSAP**：等遇到滚动叙事 / 文字 / SVG 需求时再补
+
+不要试图一开始就把所有库的 API 都背下来。**用什么学什么**才是高效路径。
+
+## 小结
+
+- CSS / Tailwind 是基础，能用就用
+- Motion 是 React 业务动画的默认选择
+- GSAP 在滚动、SVG、文字、时间轴四个领域不可替代
+- 包体积、心智模型、能力边界，三者都要权衡，不要只看一个维度
+- 同一项目可以混用，但不要让两个库管同一个元素
+
+下一章开始进入 [Motion 简介与历史](/motion/motion-introduction)。

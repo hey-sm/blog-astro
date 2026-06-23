@@ -1,0 +1,300 @@
+---
+title: 文字效果
+description: ScrambleText 乱码切换、TextPlugin 打字机与文字替换
+---
+
+# 文字效果
+
+这一章覆盖 GSAP 两个文字相关插件：
+
+- **ScrambleTextPlugin**：字符乱码切换（黑客 / 解密效果）
+- **TextPlugin**：打字机、文字替换、数字动画
+
+两者在 3.13 起均免费可商用。
+
+## ScrambleText
+
+字符在乱码中切换，最终定型为目标文本——黑客片标配。
+
+### 安装
+
+```tsx
+import gsap from 'gsap'
+import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin'
+
+gsap.registerPlugin(ScrambleTextPlugin)
+```
+
+### 基本用法
+
+```tsx filename="components/Scramble.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(ScrambleTextPlugin)
+
+export function Scramble() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.to('.text', {
+        scrambleText: {
+          text: 'Hello World',
+          chars: 'upperAndLowerCase',
+          revealDelay: 0.5,
+          speed: 0.3,
+        },
+        duration: 2,
+      })
+    },
+    { scope: container }
+  )
+
+  return <div ref={container}><h1 className="text">XXX XXXX</h1></div>
+}
+```
+
+效果：字符在乱码中跳动，逐渐定型成 "Hello World"。
+
+### 配置选项
+
+```tsx
+scrambleText: {
+  text: 'New Text',          // 目标文本
+  chars: 'XO',               // 乱码字符集
+  revealDelay: 0.5,          // 开始定型前的纯乱码时间
+  tweenLength: false,        // 是否随文本长度调整时长
+  speed: 0.3,                // 乱码切换速度
+  newClass: 'changing',      // 字符变化时加 class（配 CSS 高亮）
+  oldClass: 'old',           // 旧字符的 class
+  delimiter: '',             // 拆分单位（'' = 字符，' ' = 单词）
+}
+```
+
+### 字符集预设
+
+| chars | 含义 |
+| ----- | ---- |
+| `'upperCase'` | 大写字母 |
+| `'lowerCase'` | 小写字母 |
+| `'upperAndLowerCase'` | 大小写 |
+| 自定义字符串 | 任意字符 |
+
+```tsx
+chars: '01'              // 二进制感
+chars: '!@#$%^&*'        // 符号风
+chars: 'カタカナ'         // 日文片假名
+```
+
+### 多段连续切换
+
+```tsx
+const messages = ['Loading', 'Processing', 'Almost there', 'Done!']
+
+useGSAP(() => {
+  const tl = gsap.timeline({ repeat: -1 })
+  messages.forEach(text => {
+    tl.to('.status', {
+      scrambleText: { text, chars: 'upperAndLowerCase', speed: 0.5 },
+      duration: 1.5,
+    })
+    tl.to({}, { duration: 1 })  // 停留
+  })
+}, { scope: container })
+```
+
+### 与 SplitText 配合
+
+整段文字按字符独立 scramble：
+
+```tsx
+const split = new SplitText('.title', { type: 'chars' })
+
+gsap.from(split.chars, {
+  scrambleText: { text: '#', chars: '01', revealDelay: 0 },
+  stagger: 0.05,
+  duration: 0.5,
+})
+```
+
+## TextPlugin
+
+修改元素的文字内容——打字机、文字替换、数字滚动：
+
+### 安装
+
+```tsx
+import { TextPlugin } from 'gsap/TextPlugin'
+gsap.registerPlugin(TextPlugin)
+```
+
+### 打字机效果
+
+```tsx
+gsap.to('.text', {
+  text: 'Hello, this is being typed out',
+  duration: 3,
+  ease: 'none',
+})
+```
+
+文字一个字一个字地打出来——`duration` 是总时长。
+
+### 配置对象
+
+```tsx
+gsap.to('.text', {
+  text: {
+    value: 'New Text',
+    delimiter: ' ',          // 按单词替换（默认 '' 按字符）
+    speed: 1,                // 速度倍率
+    type: 'diff',            // 仅差异部分动画
+    rtl: false,              // 从右往左
+    padSpace: false,         // 补齐空格保持宽度
+  },
+  duration: 3,
+})
+```
+
+### 数字动画
+
+```tsx
+gsap.to('.counter', {
+  text: '12345',
+  duration: 2,
+  ease: 'none',
+  snap: { text: 1 },  // 整数
+})
+```
+
+把数字慢慢"打"到目标值——计数器风格。
+
+更精细的数字动画用 `gsap.to` 直接操作 JS 对象（[见 Tween 基础](/motion/gsap-tween)）：
+
+```tsx
+const obj = { val: 0 }
+gsap.to(obj, {
+  val: 1000,
+  duration: 2,
+  ease: 'power2.out',
+  onUpdate: () => {
+    document.querySelector('.counter')!.textContent = obj.val.toFixed(0)
+  },
+})
+```
+
+后者更灵活——能添加千位分隔符、格式化等。
+
+### 替换部分文本
+
+```tsx
+gsap.to('.text', {
+  text: { value: 'Bye World', type: 'diff' },
+  duration: 1,
+})
+```
+
+`type: 'diff'` 只动画 `Hello World` → `Bye World` 中**变化的部分**（"Hel" → "By"）——比整体替换更连贯。
+
+## 配合 ScrollTrigger
+
+滚动时触发文字效果：
+
+```tsx
+gsap.to('.text', {
+  scrambleText: { text: 'Welcome', chars: 'XYZW#@' },
+  duration: 2,
+  scrollTrigger: { trigger: '.text', start: 'top 80%' },
+})
+```
+
+## 实战：终端启动效果
+
+```tsx filename="components/Terminal.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { TextPlugin } from 'gsap/TextPlugin'
+import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(TextPlugin, ScrambleTextPlugin)
+
+export function Terminal() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.timeline({ defaults: { ease: 'none' } })
+        .to('.line1', { text: '> Initializing system...', duration: 1.5 })
+        .to('.line2', { text: '> Loading modules...', duration: 1 }, '+=0.3')
+        .to('.line3', {
+          scrambleText: { text: '> ACCESS GRANTED', chars: 'XO01' },
+          duration: 1,
+        }, '+=0.5')
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container} className="font-mono bg-black text-green-400 p-4">
+      <p className="line1"></p>
+      <p className="line2"></p>
+      <p className="line3"></p>
+    </div>
+  )
+}
+```
+
+加载文字、模块文字、最后 ACCESS GRANTED 用乱码效果——经典极客感。
+
+## 与 Motion+ Typewriter / ScrambleText 的对比
+
+Motion+ 也有 `<Typewriter>` 和 `<ScrambleText>` 组件。差别：
+
+| 维度 | Motion+ 组件 | GSAP 插件 |
+| ---- | ----------- | --------- |
+| 用法 | 声明式 prop | 命令式 |
+| 与 timeline 协作 | ❌ | ⭐ |
+| 与 ScrollTrigger 协作 | 受限 | ⭐ |
+| 价格 | 付费 | 免费 |
+| 复用性 | 单次配置 | 可任意 timeline 调用 |
+
+**已用 GSAP**：直接用插件，省钱省事。**只用 Motion**：买不买 Motion+ 看预算。
+
+## 陷阱
+
+### 中文字符的处理
+
+`scrambleText.chars: 'upperAndLowerCase'` 是英文字符——中文目标文本会出现"字母乱码 → 汉字"的过渡，视觉不统一。
+
+修复：用中文字符集：
+
+```tsx
+chars: '永和九年岁在癸丑暮春之初会于会稽山阴之兰亭修禊事也'
+```
+
+或者只对英文段用 ScrambleText、中文段用 TextPlugin。
+
+### TextPlugin 会清空 innerHTML
+
+```tsx
+gsap.to('.text', { text: 'new value' })
+```
+
+这会清空 `.text` 内的所有子元素（包括 `<strong>` / `<a>` 等）——纯文本场景适用，混合 HTML 慎用。
+
+### 性能：每帧改 innerHTML
+
+文字插件每帧更新 DOM 文本节点——大量文字 + 同时多个动画时会卡。10 个并发文字动画基本是上限，超过考虑 Canvas 渲染。
+
+## 小结
+
+- ScrambleText：字符在乱码字符集中跳动，定型为目标文本——黑客 / 极客感
+- TextPlugin：打字机、文字替换、整数动画
+- 两者都在 GSAP 3.13 免费——之前 ScrambleText 是 Club
+- 配合 SplitText 实现"每字符独立 scramble"
+- 配合 ScrollTrigger 实现滚动触发
+- 中文场景注意字符集，避免英文乱码 → 汉字的视觉跳变

@@ -1,0 +1,594 @@
+---
+title: 实战配方
+description: Modal、列表、路由切换、Hero 视差、共享元素、SVG morph——可拷贝即用的完整组件
+---
+
+# 实战配方
+
+把前面学到的所有 API 拼成实际可用的组件。每个配方包含**完整代码**、**适用场景**、**陷阱提示**——拷贝过去稍作样式调整就能上线。
+
+> 默认使用 Motion，需要 GSAP 的配方会显式说明。
+
+## 1. Modal 进出场
+
+```tsx filename="components/Modal.tsx"
+import { AnimatePresence, motion } from 'motion/react'
+
+interface ModalProps {
+  open: boolean
+  onClose: () => void
+  children: React.ReactNode
+}
+
+export function Modal({ open, onClose, children }: ModalProps) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/50 z-40"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl p-6 z-50"
+          >
+            {children}
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+```
+
+要点：
+
+- 遮罩和内容都包在 `<AnimatePresence>` 内
+- 用 `<>...</>` Fragment 不行——`<AnimatePresence>` 看不到子元素，写普通条件渲染
+- 退场动画与进场对称——视觉上有"对称感"
+
+## 2. 列表增删 / 排序
+
+```tsx filename="components/TodoList.tsx"
+import { AnimatePresence, motion } from 'motion/react'
+
+interface Todo {
+  id: string
+  text: string
+  done: boolean
+}
+
+interface Props {
+  todos: Todo[]
+  onToggle: (id: string) => void
+  onRemove: (id: string) => void
+}
+
+export function TodoList({ todos, onToggle, onRemove }: Props) {
+  return (
+    <ul>
+      <AnimatePresence mode="popLayout">
+        {todos.map(todo => (
+          <motion.li
+            key={todo.id}
+            layout
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            className="flex items-center gap-3 p-3 rounded bg-white mb-2"
+          >
+            <input
+              type="checkbox"
+              checked={todo.done}
+              onChange={() => onToggle(todo.id)}
+            />
+            <span className={todo.done ? 'line-through opacity-60' : ''}>
+              {todo.text}
+            </span>
+            <button onClick={() => onRemove(todo.id)} className="ml-auto">
+              ×
+            </button>
+          </motion.li>
+        ))}
+      </AnimatePresence>
+    </ul>
+  )
+}
+```
+
+要点：
+
+- `mode="popLayout"` 让退场元素脱离布局流，其他元素平滑补位
+- `layout` prop 自动处理排序 / 增删后的位置变化
+- 用稳定 `id` 当 `key`，不能用数组下标
+
+## 3. 路由切换淡入
+
+```tsx filename="components/AnimatedRoutes.tsx (React Router)"
+import { AnimatePresence, motion } from 'motion/react'
+import { useLocation, useRoutes } from 'react-router-dom'
+import { routes } from './routes'
+
+export function AnimatedRoutes() {
+  const location = useLocation()
+  const element = useRoutes(routes, location)
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+      >
+        {element}
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+```
+
+要点：
+
+- `key={location.pathname}` 让路径变化触发卸载 + 挂载
+- `mode="wait"` 确保旧页面退场完才进新页面（避免重叠）
+
+### Next.js App Router 版
+
+App Router 已有内置 `loading.tsx` / Suspense，路由动画用 `template.tsx`：
+
+```tsx filename="app/template.tsx"
+'use client'
+
+import { motion } from 'motion/react'
+
+export default function Template({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+```
+
+`template.tsx` 每次导航都重新挂载——天然适合做切换动画。
+
+## 4. 滚动入场（可复用 Reveal）
+
+```tsx filename="components/Reveal.tsx"
+import { motion, type Variants } from 'motion/react'
+import type { ReactNode } from 'react'
+
+const variants: Variants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: { opacity: 1, y: 0 },
+}
+
+interface Props {
+  children: ReactNode
+  delay?: number
+  className?: string
+}
+
+export function Reveal({ children, delay = 0, className }: Props) {
+  return (
+    <motion.div
+      className={className}
+      variants={variants}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.3 }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+```
+
+```tsx
+{/* 用法 */}
+<Reveal>
+  <h2>章节标题</h2>
+</Reveal>
+
+<Reveal delay={0.1}>
+  <p>段落 1</p>
+</Reveal>
+
+<Reveal delay={0.2}>
+  <p>段落 2</p>
+</Reveal>
+```
+
+整站"滚到才出现"的元素一行搞定。
+
+## 5. 共享元素动画（卡片 → 详情）
+
+```tsx filename="components/Gallery.tsx"
+import { useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+
+interface Item {
+  id: string
+  title: string
+  thumbUrl: string
+  description: string
+}
+
+export function Gallery({ items }: { items: Item[] }) {
+  const [selected, setSelected] = useState<Item | null>(null)
+
+  return (
+    <>
+      <ul className="grid grid-cols-3 gap-4">
+        {items.map(item => (
+          <motion.li
+            key={item.id}
+            layoutId={`card-${item.id}`}
+            onClick={() => setSelected(item)}
+            className="rounded-lg overflow-hidden cursor-pointer"
+          >
+            <motion.img layoutId={`img-${item.id}`} src={item.thumbUrl} />
+            <motion.h3 layoutId={`title-${item.id}`}>{item.title}</motion.h3>
+          </motion.li>
+        ))}
+      </ul>
+
+      <AnimatePresence>
+        {selected && (
+          <>
+            <motion.div
+              className="fixed inset-0 bg-black/60 z-40"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelected(null)}
+            />
+            <motion.div
+              className="fixed inset-x-4 top-12 bottom-4 bg-white rounded-2xl z-50 overflow-hidden"
+              layoutId={`card-${selected.id}`}
+            >
+              <motion.img layoutId={`img-${selected.id}`} src={selected.thumbUrl} />
+              <motion.h2 layoutId={`title-${selected.id}`}>{selected.title}</motion.h2>
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { delay: 0.2 } }}
+              >
+                {selected.description}
+              </motion.p>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+```
+
+效果：缩略图、标题、卡片框架都用 `layoutId` 飞到全屏——经典"缩略图→详情"过渡。
+
+## 6. Hero 视差（Motion 版）
+
+```tsx filename="components/ParallaxHero.tsx"
+import { motion, useScroll, useTransform } from 'motion/react'
+import { useRef } from 'react'
+
+export function ParallaxHero() {
+  const ref = useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start start', 'end start'],
+  })
+
+  const yBg = useTransform(scrollYProgress, [0, 1], ['0%', '50%'])
+  const yTitle = useTransform(scrollYProgress, [0, 1], ['0%', '-50%'])
+  const opacity = useTransform(scrollYProgress, [0, 0.5, 1], [1, 0.7, 0])
+
+  return (
+    <section ref={ref} className="relative h-screen overflow-hidden">
+      <motion.div
+        style={{ y: yBg }}
+        className="absolute inset-0 bg-cover"
+      />
+      <motion.div
+        style={{ y: yTitle, opacity }}
+        className="absolute inset-0 flex items-center justify-center"
+      >
+        <h1 className="text-6xl">Welcome</h1>
+      </motion.div>
+    </section>
+  )
+}
+```
+
+## 7. 滚动叙事 pin（GSAP 版）
+
+复杂的"钉住一段，多步骤动画"——只能用 GSAP：
+
+```tsx filename="components/PinnedStory.tsx"
+'use client'
+
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useRef } from 'react'
+
+gsap.registerPlugin(ScrollTrigger)
+
+export function PinnedStory() {
+  const container = useRef<HTMLElement>(null)
+
+  useGSAP(
+    () => {
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: container.current,
+          start: 'top top',
+          end: '+=2000',
+          pin: true,
+          scrub: 1,
+        },
+      })
+
+      tl.from('.step-1', { opacity: 0, y: 50 })
+        .to('.step-1', { opacity: 0, y: -50 }, '+=0.5')
+        .from('.step-2', { opacity: 0, y: 50 }, '<')
+        .to('.step-2', { opacity: 0, y: -50 }, '+=0.5')
+        .from('.step-3', { opacity: 0, y: 50 }, '<')
+    },
+    { scope: container }
+  )
+
+  return (
+    <section ref={container} className="h-screen relative">
+      <div className="step-1 absolute inset-0 flex items-center justify-center">
+        <h2>第一步</h2>
+      </div>
+      <div className="step-2 absolute inset-0 flex items-center justify-center">
+        <h2>第二步</h2>
+      </div>
+      <div className="step-3 absolute inset-0 flex items-center justify-center">
+        <h2>第三步</h2>
+      </div>
+    </section>
+  )
+}
+```
+
+## 8. 文字逐字浮现（GSAP SplitText）
+
+```tsx filename="components/RevealText.tsx"
+'use client'
+
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { SplitText } from 'gsap/SplitText'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useRef } from 'react'
+
+gsap.registerPlugin(SplitText, ScrollTrigger)
+
+interface Props {
+  text: string
+  className?: string
+}
+
+export function RevealText({ text, className }: Props) {
+  const ref = useRef<HTMLHeadingElement>(null)
+
+  useGSAP(
+    () => {
+      const split = new SplitText(ref.current, {
+        type: 'chars, lines',
+        mask: 'lines',
+        autoSplit: true,
+        onSplit: (self) => {
+          gsap.from(self.chars, {
+            yPercent: 100,
+            duration: 0.8,
+            stagger: 0.02,
+            ease: 'power3.out',
+            scrollTrigger: {
+              trigger: ref.current,
+              start: 'top 85%',
+            },
+          })
+        },
+      })
+
+      return () => split.revert()
+    }
+  )
+
+  return <h2 ref={ref} className={className}>{text}</h2>
+}
+```
+
+```tsx
+<RevealText text="GSAP makes complex motion easy." />
+```
+
+## 9. SVG Logo 描边入场（GSAP DrawSVG）
+
+```tsx filename="components/LogoIntro.tsx"
+'use client'
+
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(DrawSVGPlugin)
+
+export function LogoIntro() {
+  const container = useRef<SVGSVGElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.timeline()
+        .from('.outline', { drawSVG: '0%', duration: 1.5, ease: 'power2.inOut' })
+        .from('.fill', { opacity: 0, duration: 0.5 }, '-=0.3')
+    },
+    { scope: container }
+  )
+
+  return (
+    <svg ref={container} viewBox="0 0 200 80">
+      <path className="outline" d="M 10 70 L 30 10 L 50 70 M 20 50 L 40 50"
+            stroke="black" strokeWidth="3" fill="none" />
+      <path className="fill" d="M 60 70 L 80 10 L 100 70 M 70 50 L 90 50"
+            fill="black" />
+    </svg>
+  )
+}
+```
+
+## 10. 按钮交互（Motion）
+
+```tsx filename="components/Button.tsx"
+import { motion, type HTMLMotionProps } from 'motion/react'
+
+type Props = HTMLMotionProps<'button'> & {
+  variant?: 'primary' | 'ghost'
+}
+
+export function Button({ variant = 'primary', className = '', ...rest }: Props) {
+  return (
+    <motion.button
+      whileHover={{ scale: 1.04 }}
+      whileTap={{ scale: 0.96 }}
+      transition={{ duration: 0.15 }}
+      className={`px-4 py-2 rounded ${
+        variant === 'primary' ? 'bg-blue-600 text-white' : 'bg-transparent border'
+      } ${className}`}
+      {...rest}
+    />
+  )
+}
+```
+
+## 11. 数字滚动（手写版，避免 Motion+ 付费）
+
+```tsx filename="components/AnimatedNumber.tsx"
+import { useEffect, useRef, useState } from 'react'
+import { animate } from 'motion'
+
+export function AnimatedNumber({ value }: { value: number }) {
+  const [display, setDisplay] = useState(value)
+  const prev = useRef(value)
+
+  useEffect(() => {
+    const controls = animate(prev.current, value, {
+      duration: 0.8,
+      ease: 'easeOut',
+      onUpdate: latest => setDisplay(Math.round(latest)),
+    })
+    prev.current = value
+    return () => controls.stop()
+  }, [value])
+
+  return <span>{display.toLocaleString()}</span>
+}
+```
+
+```tsx
+<AnimatePresence>
+  ¥<AnimatedNumber value={total} />
+</AnimatePresence>
+```
+
+## 12. 拖动甩出（Motion drag + 速度）
+
+```tsx filename="components/SwipeCard.tsx"
+import { motion, useMotionValue, useTransform } from 'motion/react'
+
+interface Props {
+  onSwipe: (direction: 'left' | 'right') => void
+  children: React.ReactNode
+}
+
+export function SwipeCard({ onSwipe, children }: Props) {
+  const x = useMotionValue(0)
+  const rotate = useTransform(x, [-200, 200], [-20, 20])
+  const opacity = useTransform(x, [-200, -100, 0, 100, 200], [0, 1, 1, 1, 0])
+
+  return (
+    <motion.div
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      style={{ x, rotate, opacity }}
+      onDragEnd={(_, info) => {
+        if (info.offset.x > 100) onSwipe('right')
+        else if (info.offset.x < -100) onSwipe('left')
+      }}
+      className="bg-white rounded-2xl p-6 shadow-xl"
+    >
+      {children}
+    </motion.div>
+  )
+}
+```
+
+像 Tinder 一样左右滑——拖动时旋转、远端淡出。
+
+## 13. 进度条 + 滚动平滑跟随
+
+```tsx filename="components/TopProgress.tsx"
+import { motion, useScroll, useSpring } from 'motion/react'
+
+export function TopProgress() {
+  const { scrollYProgress } = useScroll()
+  const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30 })
+
+  return (
+    <motion.div
+      style={{ scaleX, transformOrigin: 'left' }}
+      className="fixed inset-x-0 top-0 h-0.5 bg-blue-500 z-50"
+    />
+  )
+}
+```
+
+把它放在 layout 里全站生效。
+
+## 14. 摇头错误提示
+
+```tsx filename="components/InputShake.tsx"
+import { motion } from 'motion/react'
+
+export function InputShake({ error, ...rest }: Props) {
+  return (
+    <motion.input
+      animate={error ? { x: [0, -8, 8, -8, 8, 0] } : {}}
+      transition={{ duration: 0.4 }}
+      className={`border rounded px-3 py-2 ${error ? 'border-red-500' : ''}`}
+      {...rest}
+    />
+  )
+}
+```
+
+`error` 由 `true` → `true` 不触发（值未变）——要保证每次错误都触发，传 timestamp / 计数器作为 key 或 trigger。
+
+## 小结
+
+- 这 14 个配方覆盖了 90% 的业务动画需求
+- 业务部分（Modal、列表、按钮）几乎都用 Motion
+- 营销 / 叙事部分（Hero、滚动 pin、文字、Logo 描边）用 GSAP
+- 复用性高的封装成组件（`<Reveal>` / `<Button>` / `<AnimatedNumber>`）
+- 写新组件时优先**复用本章配方**，再按需扩展

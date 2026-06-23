@@ -1,0 +1,394 @@
+---
+title: ScrollTrigger
+description: GSAP 的滚动驱动引擎——scrub、pin、start/end、与 React Router 协作
+---
+
+# ScrollTrigger
+
+**ScrollTrigger** 是 GSAP 生态最受欢迎的插件——把任何动画与滚动条绑定。它解决了 Motion `useScroll` 处理不了的复杂场景：
+
+- 元素 pin（钉住）一段距离
+- 多阶段动画（滚动到 A 区域播放 X，滚到 B 区域播放 Y）
+- 与时间轴双向同步（拖动滚动条等于拖动 timeline）
+
+## 安装与注册
+
+```bash
+pnpm add gsap
+```
+
+```tsx
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+
+gsap.registerPlugin(ScrollTrigger)
+```
+
+通常在 React 入口或全局 setup 文件里注册**一次**。
+
+## 最简单的滚动触发
+
+```tsx filename="components/Reveal.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useRef } from 'react'
+
+gsap.registerPlugin(ScrollTrigger)
+
+export function Reveal() {
+  const container = useRef<HTMLElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.from('.card', {
+        y: 60,
+        opacity: 0,
+        duration: 0.8,
+        stagger: 0.15,
+        scrollTrigger: {
+          trigger: '.card-list',     // 触发器元素
+          start: 'top 80%',          // 触发器顶部 到 视口 80% 时开始
+        },
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <section ref={container}>
+      <div className="card-list">
+        <div className="card">A</div>
+        <div className="card">B</div>
+        <div className="card">C</div>
+      </div>
+    </section>
+  )
+}
+```
+
+把 `scrollTrigger` 对象塞进任何 tween 即可——动画在元素进入视口时触发。
+
+## start 与 end
+
+ScrollTrigger 用**两元素的字符串**描述位置：`"trigger位置 viewport位置"`：
+
+```
+'top 80%'  → 触发器顶部 到 视口 80% 位置
+'top center' → 触发器顶部 到 视口中心
+'bottom bottom' → 触发器底部 到 视口底部
+'center center' → 居中重合
+```
+
+| start 取值 | 含义 |
+| ---------- | ---- |
+| `'top 80%'`（常用） | 元素一冒头就触发 |
+| `'top center'` | 元素到视口中线时触发 |
+| `'center center'` | 元素居中时触发 |
+
+`end` 同语法——决定动画结束位置（配合 `scrub` 时尤其重要）。
+
+```tsx
+scrollTrigger: {
+  trigger: '.hero',
+  start: 'top top',           // hero 顶部贴视口顶
+  end: 'bottom top',          // hero 底部贴视口顶（即完全滚出去）
+}
+```
+
+## scrub：动画跟随滚动
+
+不写 `scrub` 时，动画在 `start` 时**一次性**播放（像 `whileInView`）。加上 `scrub` 后，**动画进度** = **滚动进度**：
+
+```tsx
+gsap.to('.bar', {
+  width: '100%',
+  ease: 'none',
+  scrollTrigger: {
+    trigger: '.section',
+    start: 'top top',
+    end: 'bottom top',
+    scrub: true,        // 同步滚动
+  },
+})
+```
+
+`scrub: true` 完全同步；`scrub: 0.5` 给一点平滑延迟（数字 = 平滑秒数）。
+
+> `scrub` 时 `ease` 建议设 `'none'`——曲线和滚动叠加会很怪。让滚动条自己当 ease。
+
+## pin：钉住元素
+
+让元素**停在屏幕上不动**，直到动画结束才继续往下滚——视差叙事的核心技巧。
+
+```tsx
+gsap.to('.title', {
+  x: 200,
+  scrollTrigger: {
+    trigger: '.section',
+    start: 'top top',
+    end: '+=1000',      // 钉住 1000px 滚动距离
+    pin: true,          // 钉住 trigger 元素
+    scrub: true,
+  },
+})
+```
+
+效果：进入 section 后，整段被钉住，滚动条往下滚但 section 不动——`.title` 在原地动画 → 动画完后释放，section 继续向上滚出视口。
+
+| pin 配置 | 含义 |
+| -------- | ---- |
+| `pin: true` | 钉住 trigger 元素 |
+| `pin: '.something'` | 钉住其他元素 |
+| `pinSpacing: false` | 取消 pin 占位空间（高级，少用） |
+| `anticipatePin: 1` | 减少 pin 启动时的视觉跳动 |
+
+### pin 的占位
+
+`pin: true` 时 GSAP 会自动给页面**填补**钉住期间的高度——`end: '+=1000'` 表示 pin 持续 1000px 的滚动距离。
+
+### pin 与 scrub 是经典组合
+
+```tsx
+scrollTrigger: {
+  trigger: '.section',
+  start: 'top top',
+  end: '+=1500',
+  pin: true,
+  scrub: 1,
+}
+```
+
+读法：进入 section → 钉住 → 用 1500px 滚动距离播完动画 → 释放。
+
+## 进度回调
+
+```tsx
+scrollTrigger: {
+  trigger: '.hero',
+  start: 'top top',
+  end: 'bottom top',
+  onEnter: () => console.log('进入'),
+  onLeave: () => console.log('离开（向下滚出去）'),
+  onEnterBack: () => console.log('再次进入（向上滚回来）'),
+  onLeaveBack: () => console.log('向上滚出去'),
+  onUpdate: (self) => console.log('进度', self.progress),
+  onToggle: (self) => console.log('是否激活', self.isActive),
+}
+```
+
+`onUpdate` 接到 ScrollTrigger 实例 `self`——可以读 `progress` / `direction` / `velocity` 等。
+
+## markers 调试
+
+调试 start / end 位置时打开 markers——浏览器会显示两条彩色横线：
+
+```tsx
+scrollTrigger: {
+  trigger: '.box',
+  start: 'top 80%',
+  end: 'bottom top',
+  markers: true,    // 开发环境开启
+}
+```
+
+绿线是 start、红线是 end。生产环境记得关掉。
+
+## 触发整条 timeline
+
+把 timeline 整体绑给 ScrollTrigger——多步动画都跟随滚动：
+
+```tsx
+const tl = gsap.timeline({
+  scrollTrigger: {
+    trigger: '.section',
+    start: 'top top',
+    end: '+=2000',
+    pin: true,
+    scrub: 1,
+  },
+})
+
+tl.to('.title', { x: 200 })
+  .to('.subtitle', { y: 100 }, '<')
+  .to('.image', { scale: 1.5 }, '<+0.3')
+```
+
+滚动条拖到 50% → timeline 跳到 50%。**这是 Scroll-driven 动画的精髓**。
+
+## 横向滚动（水平展开）
+
+经典效果——垂直滚动等于水平翻页：
+
+```tsx filename="components/HorizontalScroll.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useRef } from 'react'
+
+gsap.registerPlugin(ScrollTrigger)
+
+export function HorizontalScroll() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      const panels = gsap.utils.toArray<HTMLElement>('.panel')
+
+      gsap.to(panels, {
+        xPercent: -100 * (panels.length - 1),
+        ease: 'none',
+        scrollTrigger: {
+          trigger: container.current,
+          pin: true,
+          scrub: 1,
+          end: () => '+=' + container.current!.offsetWidth,
+        },
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container} className="overflow-hidden">
+      <div className="flex h-screen w-[400vw]">
+        <div className="panel w-screen">Panel 1</div>
+        <div className="panel w-screen">Panel 2</div>
+        <div className="panel w-screen">Panel 3</div>
+        <div className="panel w-screen">Panel 4</div>
+      </div>
+    </div>
+  )
+}
+```
+
+整段被 pin 住，滚动驱动横向 `xPercent` 平移。营销页 / 作品集常用。
+
+## 与 React Router 协作
+
+SPA 切路由时旧页面的 ScrollTrigger 不会自动清理——`useGSAP` 已经帮你处理：
+
+```tsx
+useGSAP(() => {
+  gsap.to('.box', {
+    scrollTrigger: { trigger: '.box', start: 'top center' },
+    x: 200,
+  })
+}, { scope: container })  // 卸载时自动 revert 所有 ScrollTrigger
+```
+
+`useGSAP` 的 cleanup 会把 scope 内的 ScrollTrigger 一并销毁。
+
+### 路由切换后刷新
+
+如果路由切换不卸载组件（如 Next.js 浅路由），手动调：
+
+```tsx
+ScrollTrigger.refresh()
+```
+
+强制重新计算所有 ScrollTrigger 的位置。
+
+## ScrollTrigger.create（独立创建）
+
+不想绑给 tween？可以独立创建 ScrollTrigger 监听器：
+
+```tsx
+ScrollTrigger.create({
+  trigger: '.box',
+  start: 'top center',
+  end: 'bottom center',
+  onEnter: () => console.log('进入'),
+  onLeave: () => console.log('离开'),
+  toggleClass: { targets: '.nav', className: 'active' },  // 进入区间时加 class
+})
+```
+
+`toggleClass` 是个便捷选项——元素进入 trigger 范围时自动加 class。
+
+## 配合 Motion Value（混用）
+
+Motion 与 ScrollTrigger 可以"协作"——ScrollTrigger 算位置，Motion 处理具体动画：
+
+```tsx
+// 用 ScrollTrigger 决定状态
+const [visible, setVisible] = useState(false)
+
+useGSAP(() => {
+  ScrollTrigger.create({
+    trigger: '.section',
+    start: 'top 80%',
+    onEnter: () => setVisible(true),
+    onLeaveBack: () => setVisible(false),
+  })
+}, { scope: container })
+
+// 用 Motion 渲染
+<motion.div animate={{ opacity: visible ? 1 : 0 }} />
+```
+
+不过实际上 **Motion 的 `whileInView` + `viewport.once`** 已经能搞定这种简单切换，没必要引入 ScrollTrigger。混用通常在 GSAP 处理复杂滚动叙事、Motion 处理 UI 交互时才合理。
+
+## 陷阱
+
+### start / end 写错没动画
+
+```tsx
+scrollTrigger: { trigger: '.box', start: 'bottom top' }
+```
+
+如果元素已经在视口底部以下，`bottom top` 永远到不了——动画从不触发。**用 markers 调试，永远是第一步**。
+
+### pin 元素需要明确高度
+
+被 pin 的元素如果 `height: auto`，pin 期间高度可能塌缩。给一个明确的 `min-height`。
+
+### 多个 ScrollTrigger 影响布局
+
+页面变长（懒加载、异步内容到达）后，旧 ScrollTrigger 的位置不准。手动：
+
+```tsx
+ScrollTrigger.refresh()
+```
+
+或在所有图片加载完后调：
+
+```tsx
+window.addEventListener('load', () => ScrollTrigger.refresh())
+```
+
+### `scrub: true` 配复杂 ease 视觉怪
+
+scrub 模式下让 GSAP 的 ease 和滚动条 ease 叠加会很怪——把 tween 的 `ease: 'none'`，让滚动决定节奏。
+
+### 未注册插件
+
+```tsx
+gsap.to('.box', { scrollTrigger: { ... } })  // ❌ 没注册，报错
+```
+
+记得 `gsap.registerPlugin(ScrollTrigger)`。建议在全局 setup 文件做。
+
+## 与 Motion useScroll 的对比
+
+| 场景 | Motion `useScroll` | GSAP ScrollTrigger |
+| ---- | ----------------- | ------------------ |
+| 进度条 | ⭐ 一行 | 也行但杀鸡用牛刀 |
+| 视差 | ⭐ 简单 `useTransform` | 也行 |
+| 元素入场 | ⭐ `whileInView` | 可以 |
+| pin 元素 | ❌ | ⭐ |
+| 滚动驱动复杂时间轴 | 有限 | ⭐ 极强 |
+| 多阶段触发 | 麻烦 | ⭐ 多个 ScrollTrigger 协作 |
+| 包大小 | 包内 | +15 KB |
+
+**业务网站用 `useScroll`，营销页 / 滚动叙事用 ScrollTrigger**——选型清晰。
+
+## 小结
+
+- ScrollTrigger 把滚动条变成动画输入源
+- `start` / `end` 用 "元素位置 视口位置" 两元素字符串描述
+- `scrub: true` 让动画进度跟随滚动条
+- `pin: true` 钉住元素，是滚动叙事的核心技巧
+- 整条 timeline 可以绑 ScrollTrigger——多步动画跟随滚动
+- 开发时一定开 `markers: true` 调位置
+- 用 `useGSAP` 自动清理；浅路由切换后手动 `ScrollTrigger.refresh()`

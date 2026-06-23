@@ -1,0 +1,192 @@
+---
+title: Motion+ 付费组件
+description: AnimateNumber、Carousel、Cursor、ScrambleText、Ticker、Typewriter、useCurtains 一览
+---
+
+# Motion+ 付费组件
+
+Motion 主体免费开源。**Motion+** 是作者推出的付费层（一次性订阅），提供一组高度封装的 ready-made 组件。它们不是"基础 API"，而是把常见的复杂视效产品化——你按 prop 配置即用。
+
+> 是否值得买取决于项目类型：业务工具站基本用不上；营销官网、个人作品集、品牌站如果想省下大量手写动画时间，回本很快。
+
+## Motion+ 包含什么
+
+| 类型 | 名称 | 一句话用途 |
+| ---- | ---- | ---------- |
+| 组件 | `<AnimateNumber>` | 数字滚动到目标值（带千位分隔、格式化） |
+| 组件 | `<Carousel>` | 触屏可拖、惯性、循环的轮播 |
+| 组件 | `<Cursor>` | 自定义鼠标光标（hover 不同元素变形） |
+| 组件 | `<ScrambleText>` | 字符乱码切换效果（类 Matrix） |
+| 组件 | `<Ticker>` | 无限循环跑马灯 |
+| 组件 | `<Typewriter>` | 打字机文字效果 |
+| Hook | `useCurtains` | 帷幕过渡（页面切换时遮罩动画） |
+
+下面挨个简介，重点是**何时用、何时不用、能不能自己实现**。
+
+## `<AnimateNumber>`
+
+```tsx
+import { AnimateNumber } from 'motion-plus/react'
+
+<AnimateNumber value={count} format={{ notation: 'compact' }} />
+```
+
+数字从当前值平滑过渡到 `value`——可以用于：
+
+- 仪表盘指标
+- 购物车合计
+- 计数器
+- 投票 / 点赞数
+
+**自己实现**：用 [`useAnimate`](/motion/motion-use-animate) 的"单值动画" + `Intl.NumberFormat` 几十行可写一个简化版。Motion+ 的好处是处理边界（负数、千位分隔、本地化、千万亿单位等）。
+
+## `<Carousel>`
+
+```tsx
+import { Carousel } from 'motion-plus/react'
+
+<Carousel autoplay={3000} loop>
+  <img src="/1.jpg" />
+  <img src="/2.jpg" />
+  <img src="/3.jpg" />
+</Carousel>
+```
+
+特点：
+
+- 触屏拖动 + 惯性
+- 键盘 / 鼠标支持
+- 循环、自动播放
+- 响应式
+- 无障碍（aria-roledescription、键盘导航）
+
+**自己实现**：用免费的 `motion.div` + `drag="x"` + `<Reorder>` 能做出来，但要做好无障碍、循环逻辑、惯性、性能很麻烦。商业站直接买。
+
+替代方案：[Swiper.js](https://swiperjs.com)（免费、功能更多但包大）、[Embla Carousel](https://www.embla-carousel.com)（轻量、无样式）。
+
+## `<Cursor>`
+
+```tsx
+import { Cursor } from 'motion-plus/react'
+
+<Cursor>
+  <div className="size-4 rounded-full bg-black" />
+</Cursor>
+```
+
+替换默认鼠标光标。配合 `<motion.*>` 元素上的特殊 prop 可以让光标 hover 到不同元素时变形：
+
+```tsx
+<a href="#" data-cursor="text">链接（光标变成 I 形）</a>
+```
+
+**自己实现**：用 [Motion Values](/motion/motion-values) 章的"SmoothFollower"模式可以做基础版。Motion+ 提供多种交互模式（吸附、磁吸、变形）。
+
+营销官网常用——业务站基本不需要。
+
+## `<ScrambleText>`
+
+```tsx
+import { ScrambleText } from 'motion-plus/react'
+
+<ScrambleText text="Hello World" />
+```
+
+字符在乱码字符间快速切换，最终定格在目标文本——黑客片 / 科幻风的常用效果。
+
+**自己实现**：纯 JS 几十行可写——`setInterval` 替换字符 + 逐字定型。GSAP 也有免费的 ScrambleTextPlugin（[见 GSAP 文字效果章](/motion/gsap-text-effects)）。
+
+## `<Ticker>`
+
+```tsx
+import { Ticker } from 'motion-plus/react'
+
+<Ticker duration={20}>
+  <span>新闻 1</span>
+  <span>新闻 2</span>
+  <span>新闻 3</span>
+</Ticker>
+```
+
+无限循环水平 / 垂直跑马灯。处理了边界缝合、暂停 hover、变速等。
+
+**自己实现**：CSS `@keyframes` + `animation: scroll linear infinite` 加上**复制一份内容**可以做出来，但要做"动态项目数、暂停、响应式"得用 JS。
+
+## `<Typewriter>`
+
+```tsx
+import { Typewriter } from 'motion-plus/react'
+
+<Typewriter text={["Hi", "I'm a developer", "Welcome"]} loop />
+```
+
+逐字打出（带光标闪烁），删除再换下一句——程序员个人站标配。
+
+**自己实现**：纯 JS / React `useState` + `setTimeout` 可以写一个。注意要处理 unicode（emoji 不会被拆开）。
+
+## `useCurtains`
+
+页面切换时全屏遮罩从顶部 / 侧面滑出再滑回——SPA 路由切换的电影感过渡。
+
+```tsx
+import { useCurtains } from 'motion-plus/react'
+
+function App() {
+  const { open } = useCurtains()
+  // 在路由切换前 open()
+}
+```
+
+**自己实现**：能做但工程复杂——要协调 React Router 的导航事件、动画完成回调、防止抖动。买省心。
+
+## 何时买 Motion+
+
+适合：
+
+- 个人作品集（追求"看一眼就记住"的效果）
+- 营销 / 落地页（转化率敏感，多花一点设计/动效投入回本快）
+- 品牌站、艺术家网站、机构展示页
+- 频繁做不同 SaaS 演示视频的团队（重复造轮子时间成本高）
+
+不适合：
+
+- 业务工具、SaaS 后台、CMS 控制面板（用户不会看动效，会嫌它"花哨"）
+- 团队成员对 Motion API 还不熟（先把免费部分用好再说）
+- 包大小敏感的嵌入式 widget
+
+## 替代方案对照
+
+| 需求 | Motion+ | 免费替代 |
+| ---- | ------- | -------- |
+| 数字滚动 | `<AnimateNumber>` | 自己用 `useAnimate` 写，或 [`react-countup`](https://github.com/glennreyes/react-countup) |
+| 轮播 | `<Carousel>` | [Swiper](https://swiperjs.com) / [Embla](https://www.embla-carousel.com) |
+| 自定义光标 | `<Cursor>` | 自己写（参考 Motion Values 章） |
+| 文字乱码 | `<ScrambleText>` | GSAP ScrambleTextPlugin（免费） |
+| 跑马灯 | `<Ticker>` | CSS `@keyframes` + 复制元素 |
+| 打字机 | `<Typewriter>` | [`react-type-animation`](https://github.com/maxeth/react-type-animation) |
+| 帷幕切换 | `useCurtains` | 自己用 `<AnimatePresence>` + React Router |
+
+## 如何获得
+
+访问 [motion.dev/plus](https://motion.dev/plus) 订阅。会拿到：
+
+- 私有 npm 包访问
+- 文档与示例
+- 邮件 / Discord 支持
+
+包同样从 `motion-plus/react` 导入：
+
+```tsx
+import { AnimateNumber, Carousel, Cursor } from 'motion-plus/react'
+```
+
+## 一句话总结
+
+**Motion+ 的价值不在"独家 API"，而在"省时间"**——所有效果理论上都能自己写，但产品化封装能让你不用纠结边界。营销 / 品牌项目建议买；业务项目能省则省。
+
+## 小结
+
+- Motion+ 是付费层，提供 ready-made 高级组件
+- 七个组件 / Hook 都有免费替代方案——按"省时间"换"金钱"的视角评估
+- 主体 Motion 永远免费——Motion+ 是补充不是必需
+- 业务工具站基本用不上；营销 / 品牌 / 作品集回本快

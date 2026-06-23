@@ -1,0 +1,289 @@
+---
+title: MotionPath
+description: 沿任意路径运动——MotionPathPlugin、autoRotate、对齐与可视化编辑
+---
+
+# MotionPath
+
+`MotionPathPlugin` 让对象**沿一条任意路径运动**——曲线、SVG 路径、贝塞尔都行。这是其他动画库基本做不到的能力。
+
+> 这个插件在 3.13 起免费可商用。
+
+## 安装
+
+```tsx
+import gsap from 'gsap'
+import { MotionPathPlugin } from 'gsap/MotionPathPlugin'
+
+gsap.registerPlugin(MotionPathPlugin)
+```
+
+## 沿 SVG 路径运动
+
+```tsx filename="components/FlyAlongPath.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { MotionPathPlugin } from 'gsap/MotionPathPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(MotionPathPlugin)
+
+export function FlyAlongPath() {
+  const container = useRef<SVGSVGElement>(null)
+
+  useGSAP(
+    () => {
+      gsap.to('.plane', {
+        duration: 5,
+        repeat: -1,
+        ease: 'none',
+        motionPath: {
+          path: '#flightPath',
+          align: '#flightPath',
+          alignOrigin: [0.5, 0.5],
+          autoRotate: true,
+        },
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <svg ref={container} viewBox="0 0 600 400">
+      <path
+        id="flightPath"
+        d="M 50 200 C 150 50, 300 350, 450 100"
+        fill="none"
+        stroke="#ddd"
+        strokeDasharray="4 4"
+      />
+      <circle className="plane" r="8" fill="#3b82f6" />
+    </svg>
+  )
+}
+```
+
+效果：圆点沿 S 形曲线无限循环移动。
+
+## motionPath 配置
+
+| 字段 | 含义 |
+| ---- | ---- |
+| `path` | 路径来源：SVG 选择器、点数组、SVG path 字符串 |
+| `align` | 让对象**对齐**到路径上（自动计算偏移） |
+| `alignOrigin` | 对齐时的对象锚点 `[x, y]`（0~1） |
+| `autoRotate` | 是否沿切线自动旋转 |
+| `start` / `end` | 路径上的起止位置（0~1） |
+| `curviness` | 用点数组时的平滑度 |
+| `type` | 路径形态：`'cubic'`（默认）/ `'thru'`（穿过所有点）/ `'soft'` |
+
+### autoRotate
+
+让对象方向**始终沿着路径切线**——飞机、车辆、箭头特别需要：
+
+```tsx
+motionPath: {
+  path: '#road',
+  autoRotate: true,         // 自动跟随
+  // 或 autoRotate: 90 偏移 90 度（如车头朝右）
+}
+```
+
+### align 让对象贴合路径
+
+如果路径在 `<svg>` 一个位置、对象在另一个位置，怎么让对象**自动移到路径起点**？
+
+```tsx
+motionPath: {
+  path: '#flightPath',
+  align: '#flightPath',     // 对齐到同一个路径
+  alignOrigin: [0.5, 0.5],  // 对象的中心对准路径起点
+}
+```
+
+`alignOrigin` 是对象的锚点（0~1）——`[0.5, 0.5]` 是中心，`[0, 0]` 是左上。
+
+## 用点数组定义路径
+
+不用 SVG 路径，直接给一串坐标：
+
+```tsx
+gsap.to('.box', {
+  duration: 3,
+  ease: 'power1.inOut',
+  motionPath: {
+    path: [
+      { x: 0, y: 0 },
+      { x: 100, y: -80 },
+      { x: 200, y: 0 },
+      { x: 300, y: 80 },
+      { x: 400, y: 0 },
+    ],
+    curviness: 1.5,
+    type: 'cubic',
+  },
+})
+```
+
+| type | 行为 |
+| ---- | ---- |
+| `'cubic'` | 三次曲线平滑（默认）——可能不完全穿过给定点 |
+| `'thru'` | 穿过所有点（关键时刻必经） |
+| `'soft'` | 经过中间点附近，更平滑 |
+
+## 沿路径分布多个元素
+
+```tsx
+gsap.set('.dot', {
+  motionPath: {
+    path: '#track',
+    align: '#track',
+    alignOrigin: [0.5, 0.5],
+    start: (i) => i / 10,    // 函数：第 i 个 dot 从路径的 i/10 位置开始
+    end: (i) => i / 10,
+  },
+})
+```
+
+10 个圆点均匀分布在路径上——用于轨道、装饰图案。
+
+## MotionPathHelper（可视化编辑）
+
+GSAP 的 MotionPathHelper 让你**在浏览器里直接拖控制点**编辑路径——拖完复制 SVG path 字符串到代码里。
+
+```tsx
+import { MotionPathHelper } from 'gsap/MotionPathHelper'
+gsap.registerPlugin(MotionPathPlugin, MotionPathHelper)
+
+MotionPathHelper.create('.plane', {
+  path: '#flightPath',
+  // 其他 motionPath 配置
+})
+```
+
+页面上会出现可拖动的控制点——拖到满意的曲线后控制台输出 `d` 字符串，粘贴回 SVG。
+
+> **只在开发时用**——生产环境删掉这行代码。
+
+## 实战示例
+
+### 沿圆环旋转
+
+```tsx
+gsap.to('.satellite', {
+  duration: 8,
+  repeat: -1,
+  ease: 'none',
+  motionPath: {
+    path: '#orbit',
+    align: '#orbit',
+    alignOrigin: [0.5, 0.5],
+  },
+})
+```
+
+```svg
+<svg viewBox="0 0 400 400">
+  <circle id="orbit" cx="200" cy="200" r="150"
+          fill="none" stroke="#ddd" strokeDasharray="2 4" />
+  <circle className="satellite" r="10" fill="#3b82f6" />
+</svg>
+```
+
+绕中心圆轨道飞——一行配置就行。
+
+### 飞机起飞轨迹
+
+```tsx
+gsap.timeline()
+  .to('.plane', {
+    duration: 2,
+    ease: 'power2.in',
+    motionPath: {
+      path: '#runway',
+      align: '#runway',
+      alignOrigin: [0.5, 0.5],
+      autoRotate: true,
+      start: 0,
+      end: 0.4,
+    },
+  })
+  .to('.plane', {
+    duration: 3,
+    ease: 'power2.out',
+    motionPath: {
+      path: '#sky',
+      align: '#sky',
+      alignOrigin: [0.5, 0.5],
+      autoRotate: true,
+    },
+  })
+```
+
+先沿跑道滑行（用 `start: 0, end: 0.4` 只走前 40%），再沿天空曲线起飞。
+
+### 跟随鼠标的拖尾
+
+复杂效果：把鼠标轨迹记录成路径，然后让另一个元素沿路径追随——通常用 Motion Values 直接做更简单。
+
+## 与 ScrollTrigger 配合
+
+让路径运动跟随滚动：
+
+```tsx
+gsap.to('.dot', {
+  motionPath: {
+    path: '#scrollPath',
+    align: '#scrollPath',
+    autoRotate: true,
+  },
+  ease: 'none',
+  scrollTrigger: {
+    trigger: '.section',
+    start: 'top top',
+    end: 'bottom top',
+    scrub: 1,
+  },
+})
+```
+
+滚动条决定对象在路径上的位置——可以做**滚动驱动的引导动画**。
+
+## 陷阱
+
+### path 元素没在 DOM 中
+
+```tsx
+motionPath: { path: '#nonexistent' }  // ❌ 找不到，动画失败
+```
+
+确保 path 在 DOM 中、id 拼写正确。SSR 框架里要等组件挂载后再创建动画——`useGSAP` 已经帮你处理这点。
+
+### `align` 改变了元素位置
+
+如果你已经手动定位了元素，再用 `align` 会**强制移到路径上**——可能不是你想要的。`align` 适合"让对象立刻贴合路径起点"。
+
+### autoRotate 与现有 rotation 冲突
+
+```tsx
+gsap.to('.plane', {
+  rotation: 90,
+  motionPath: { path: '#x', autoRotate: true },  // ❌ rotation 被 autoRotate 覆盖
+})
+```
+
+不要同时指定 rotation 和 `autoRotate: true`——选一个。如果想"加偏移"，用 `autoRotate: 90`（数字偏移量）。
+
+### path 路径方向
+
+SVG path 的方向由 `d` 字符串决定——`M 0 0 L 100 0` 是从左到右；`M 100 0 L 0 0` 是从右到左。autoRotate 的方向跟路径方向一致。
+
+## 小结
+
+- `MotionPath` 让对象沿 SVG 路径或坐标点曲线运动
+- `align` + `alignOrigin` 把对象精确贴合到路径
+- `autoRotate` 让对象方向跟随路径切线——飞机 / 车辆必用
+- 用点数组 + `curviness` / `type` 控制无 SVG 时的平滑度
+- `MotionPathHelper` 浏览器内拖控制点编辑路径（只在开发时用）
+- 配合 ScrollTrigger 实现滚动驱动的路径动画
+- Motion 没有等价物——这是 GSAP 独有的能力

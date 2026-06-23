@@ -1,0 +1,315 @@
+---
+title: SVG 动画
+description: Motion 下的 SVG——pathLength 描边、viewBox 缩放、点动画
+---
+
+# SVG 动画
+
+SVG 是矢量图——任何 SVG 元素（`<circle>` / `<path>` / `<rect>` / `<line>` 等）都能用 `motion.*` 包装并动画化。本章讲 Motion 对 SVG 的特殊支持，重点是 `pathLength`（笔画绘制）与 `viewBox` 动画。
+
+## motion 包装 SVG
+
+所有 SVG 元素都有对应的 motion 版本：
+
+```tsx
+import { motion } from 'motion/react'
+
+<svg viewBox="0 0 100 100">
+  <motion.circle
+    cx="50" cy="50" r="40"
+    fill="#3b82f6"
+    initial={{ scale: 0 }}
+    animate={{ scale: 1 }}
+  />
+</svg>
+```
+
+可动属性除了 transform / opacity，还包括 SVG 特有的：
+
+- `fill` / `stroke` / `strokeWidth`
+- `cx` / `cy` / `r`（圆）
+- `x` / `y` / `width` / `height`（矩形）
+- `pathLength`（路径绘制——Motion 虚拟属性）
+- `d`（path 数据，可在不同 path 之间插值）
+
+## pathLength：笔画绘制
+
+Motion 提供一个虚拟属性 `pathLength`——0 表示"什么都不显示"，1 表示"完整描边"，中间值绘制对应比例。
+
+```tsx filename="components/DrawCheck.tsx"
+import { motion } from 'motion/react'
+
+export function DrawCheck() {
+  return (
+    <svg width="80" height="80" viewBox="0 0 24 24">
+      <motion.path
+        d="M 4 12 L 10 18 L 20 6"
+        fill="none"
+        stroke="#10b981"
+        strokeWidth="3"
+        strokeLinecap="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+      />
+    </svg>
+  )
+}
+```
+
+效果：从左到右"画"出一个对勾。
+
+Motion 内部实际操作的是 `stroke-dasharray` 与 `stroke-dashoffset`——你不用关心，写 `pathLength` 就行。
+
+### 配套属性
+
+| 属性 | 含义 |
+| ---- | ---- |
+| `pathLength` | 描边长度（0~1） |
+| `pathSpacing` | 描边间隔（0~1） |
+| `pathOffset` | 描边起点偏移（0~1） |
+
+虚线动画用 `pathSpacing` + `pathOffset` 组合：
+
+```tsx
+<motion.path
+  d="..."
+  initial={{ pathSpacing: 0.5, pathOffset: 0 }}
+  animate={{ pathOffset: 1 }}
+  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+/>
+```
+
+## 多段路径序列
+
+多条路径依次画出来，配合 [Variants](/motion/motion-variants)：
+
+```tsx filename="components/Logo.tsx"
+import { motion } from 'motion/react'
+
+const draw = {
+  hidden: { pathLength: 0, opacity: 0 },
+  visible: {
+    pathLength: 1,
+    opacity: 1,
+    transition: {
+      pathLength: { duration: 1.2, ease: 'easeInOut' },
+      opacity: { duration: 0.2 },
+    },
+  },
+}
+
+export function Logo() {
+  return (
+    <motion.svg
+      width="200" height="80"
+      viewBox="0 0 200 80"
+      initial="hidden"
+      animate="visible"
+    >
+      <motion.path d="M 10 40 L 60 40" stroke="black" variants={draw} />
+      <motion.path d="M 70 10 L 70 70" stroke="black" variants={draw} />
+      <motion.path d="M 80 40 L 130 40" stroke="black" variants={draw} />
+    </motion.svg>
+  )
+}
+```
+
+每条线独立 variant，父级 `staggerChildren` 可控制错峰：
+
+```tsx
+const container = {
+  visible: {
+    transition: { staggerChildren: 0.3 },
+  },
+}
+```
+
+## viewBox 动画
+
+`viewBox` 是 SVG 的"取景框"——动画它可以做相机推拉效果：
+
+```tsx
+<motion.svg
+  initial={{ viewBox: '0 0 100 100' }}
+  animate={{ viewBox: '25 25 50 50' }}
+  transition={{ duration: 1 }}
+>
+  ...
+</motion.svg>
+```
+
+从看全图缩到只看中心一半——"放大"效果。地图、SVG 信息图常用。
+
+> 注意：`viewBox` 字符串里的四个数字 Motion 会自动插值。
+
+## morphing：path 形变
+
+不同 `d` 属性之间能插值——但要求两个 path 的命令数量、类型一致：
+
+```tsx
+<motion.path
+  initial={{ d: 'M 10 10 L 50 10 L 50 50 L 10 50 Z' }}  // 矩形
+  animate={{ d: 'M 30 10 L 50 30 L 30 50 L 10 30 Z' }}  // 菱形
+  transition={{ duration: 1 }}
+/>
+```
+
+两个 `d` 都是"4 个直线命令 + 闭合"——可以平滑插值。
+
+**命令数量不一样**（一个 4 条线、一个 8 条线）的 path 不能直接插值——会跳变。复杂形状变换请用 [GSAP MorphSVG](/motion/gsap-morph-svg)，它会自动补点对齐。
+
+## 描边渐变（gradient）
+
+Motion 不能直接插值 `<linearGradient>` 的 stop——但你可以动画 gradient 的位置或透明度：
+
+```tsx
+<svg>
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0%" stopColor="#3b82f6" />
+      <stop offset="100%" stopColor="#8b5cf6" />
+    </linearGradient>
+  </defs>
+  <motion.rect
+    width="200" height="50"
+    fill="url(#g)"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+  />
+</svg>
+```
+
+复杂的渐变动画建议直接用 CSS `background: linear-gradient(...)` + Motion 动画 background-position。
+
+## 复杂示例：心跳图标
+
+```tsx filename="components/HeartBeat.tsx"
+import { motion } from 'motion/react'
+
+export function HeartBeat() {
+  return (
+    <motion.svg
+      width="60" height="60" viewBox="0 0 24 24"
+      animate={{ scale: [1, 1.15, 1, 1.15, 1] }}
+      transition={{
+        duration: 1.2,
+        repeat: Infinity,
+        times: [0, 0.15, 0.3, 0.45, 1],
+      }}
+    >
+      <motion.path
+        d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"
+        fill="#ef4444"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 1, delay: 0.2 }}
+      />
+    </motion.svg>
+  )
+}
+```
+
+整个 SVG 心跳缩放，内部 path 先被"画"出来。
+
+## 滚动驱动绘制
+
+把 `pathLength` 绑给 `useScroll`，滚动时路径被"画"出来：
+
+```tsx filename="components/ScrollDraw.tsx"
+import { motion, useScroll } from 'motion/react'
+
+export function ScrollDraw() {
+  const { scrollYProgress } = useScroll()
+  return (
+    <svg
+      width="120" height="120" viewBox="0 0 100 100"
+      className="fixed top-4 right-4"
+    >
+      <motion.circle
+        cx="50" cy="50" r="45"
+        stroke="#3b82f6" strokeWidth="6" fill="none"
+        style={{ pathLength: scrollYProgress }}
+        transform="rotate(-90 50 50)"
+      />
+    </svg>
+  )
+}
+```
+
+效果：右上角一个圆环，滚动 0~100% 时圆环从 0 长到完整——比顶部进度条更精致。
+
+## React 与 SVG 的常见组合
+
+### 受控图标库
+
+很多图标库（lucide / heroicons）的图标本质就是 `<svg>` + `<path>`。动画它们需要给 path 加 ref 或用 motion 包装：
+
+```tsx
+import { Heart } from 'lucide-react'
+
+// ❌ 无法直接给 path 加 motion
+<Heart className="text-red-500" />
+
+// ✅ 手动复制 SVG，包装 motion
+function MotionHeart({ filled }: { filled: boolean }) {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24">
+      <motion.path
+        d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"
+        animate={{ fill: filled ? '#ef4444' : 'transparent', scale: filled ? [1, 1.3, 1] : 1 }}
+        stroke="#ef4444"
+        strokeWidth="2"
+      />
+    </svg>
+  )
+}
+```
+
+## 陷阱
+
+### pathLength 必须配合 stroke
+
+```tsx
+{/* 没 stroke，pathLength 没视觉效果 */}
+<motion.path d="..." fill="blue" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} />
+
+{/* ✅ */}
+<motion.path d="..." stroke="blue" strokeWidth="2" fill="none" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} />
+```
+
+`pathLength` 影响的是描边可见长度——没有 stroke 等于啥都没画。
+
+### viewBox 与 width / height 的关系
+
+`viewBox` 改了视觉缩放，但元素本身的 `width` / `height` 不变。要做"地图缩放"效果，动画的是 `viewBox` 而不是 `width`。
+
+### transform 的中心点是元素中心
+
+SVG 元素的 `scale` / `rotate` 中心默认是 SVG 坐标系原点 (0, 0)，**不是元素中心**！想绕元素中心旋转：
+
+```tsx
+<motion.rect
+  x="50" y="50" width="100" height="100"
+  style={{ originX: '100px', originY: '100px' }}
+  animate={{ rotate: 360 }}
+/>
+```
+
+或者用 `transform-origin` 配 SVG 坐标：
+
+```css
+.rect { transform-origin: 100px 100px; transform-box: fill-box; }
+```
+
+### path 形变要点数一致
+
+`d` 之间的插值要求 path 命令数量和类型一致——否则会"跳"。常见做法是用占位 path 让两个形状都有相同节点。复杂场景请用 [MorphSVG](/motion/gsap-morph-svg)。
+
+## 小结
+
+- 所有 SVG 元素都有 `motion.*` 版本
+- `pathLength` / `pathSpacing` / `pathOffset` 是 Motion 的虚拟属性——用来做笔画绘制
+- `viewBox` 字符串能直接插值——做缩放 / 平移视图很方便
+- `d` 之间能插值但命令数必须一致——复杂形变交给 GSAP MorphSVG
+- SVG transform 的原点是坐标系 (0, 0)，绕中心旋转要显式设置 origin

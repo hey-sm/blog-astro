@@ -1,0 +1,326 @@
+---
+title: useAnimate 命令式
+description: 用 useAnimate 在事件回调里手动控制动画——序列、循环、动态目标
+---
+
+# useAnimate 命令式
+
+到目前为止我们写的所有动画都是**声明式**——把动画写在 JSX 里，状态变化触发动画。但有些场景天然就是**命令式**的：
+
+- 表单提交成功 → 播一个"打钩"动画 → 跳转
+- 点击按钮 → 三个元素按顺序入场
+- 异步操作完成后 → 触发特定动画
+- 动画完成后做点什么（比 `onAnimationComplete` 更灵活）
+
+`useAnimate` 就是 Motion 的命令式 API——返回一个**动画函数**和**作用域 ref**，你在事件回调或 effect 里手动调用。
+
+> 与 [Motion Values](/motion/motion-values) 的差异：Motion Values 处理"持续变化的值"，`useAnimate` 处理"一次性触发的动画"。
+
+## 最简单的用法
+
+```tsx filename="components/Pulse.tsx"
+import { useAnimate } from 'motion/react'
+
+export function Pulse() {
+  const [scope, animate] = useAnimate()
+
+  return (
+    <button
+      onClick={() => {
+        animate(scope.current, { scale: [1, 1.2, 1] }, { duration: 0.4 })
+      }}
+    >
+      <div ref={scope}>点我脉冲</div>
+    </button>
+  )
+}
+```
+
+要点：
+
+- `useAnimate()` 返回 `[scope, animate]` 二元组
+- `scope` 是个 ref——挂到要动画的元素上
+- `animate(target, keyframes, options)` 触发动画
+
+`animate` 函数签名：
+
+```ts
+function animate(
+  target: HTMLElement | string | NodeList,
+  keyframes: object,
+  options?: AnimationOptions
+): AnimationPlaybackControls
+```
+
+## scope 内的选择器
+
+`scope` 不止是单个 ref——它是一个**查询范围**。可以用 CSS 选择器选中 scope 内的元素：
+
+```tsx filename="components/Sequence.tsx"
+import { useAnimate } from 'motion/react'
+import { useEffect } from 'react'
+
+export function Sequence() {
+  const [scope, animate] = useAnimate()
+
+  useEffect(() => {
+    const run = async () => {
+      await animate('.title', { opacity: 1, y: 0 }, { duration: 0.4 })
+      await animate('.subtitle', { opacity: 1 }, { duration: 0.3 })
+      await animate('.button', { scale: 1 }, { type: 'spring' })
+    }
+    run()
+  }, [])
+
+  return (
+    <section ref={scope}>
+      <h1 className="title" style={{ opacity: 0, transform: 'translateY(20px)' }}>
+        欢迎
+      </h1>
+      <p className="subtitle" style={{ opacity: 0 }}>请登录</p>
+      <button className="button" style={{ transform: 'scale(0)' }}>
+        开始
+      </button>
+    </section>
+  )
+}
+```
+
+`'.title'` 只在 `scope` 内查找，避免污染其他组件。
+
+## 序列动画
+
+`animate` 返回 Promise，可以用 `await` 串起来：
+
+```tsx
+async function play() {
+  await animate('.a', { x: 100 })
+  await animate('.b', { x: 100 })
+  await animate('.c', { x: 100 })
+}
+```
+
+也可以传**序列数组**——更紧凑：
+
+```tsx
+import { useAnimate, type AnimationSequence } from 'motion/react'
+
+const sequence: AnimationSequence = [
+  ['.a', { x: 100 }, { duration: 0.4 }],
+  ['.b', { x: 100 }, { duration: 0.4 }],
+  ['.c', { x: 100 }, { duration: 0.4 }],
+]
+
+animate(sequence)
+```
+
+### 相对时间
+
+序列项可以用 `at` 控制相对时间：
+
+```tsx
+const sequence: AnimationSequence = [
+  ['.a', { x: 100 }, { duration: 0.4 }],
+  ['.b', { x: 100 }, { duration: 0.4, at: '<' }],     // 与上一项同时开始
+  ['.c', { x: 100 }, { duration: 0.4, at: '-0.2' }],  // 比上一项结束早 0.2s
+  ['.d', { x: 100 }, { duration: 0.4, at: 1.0 }],     // 绝对时间 1s
+]
+```
+
+| at 值 | 含义 |
+| ----- | ---- |
+| 不写 | 上一项结束后立即开始 |
+| `'<'` | 与上一项**同时**开始 |
+| 数字（如 `0.5`） | 总时间轴的绝对秒数 |
+| 字符串（如 `'-0.2'` / `'+0.5'`） | 相对上一项结束的偏移 |
+
+类似 GSAP 的 timeline position parameter。
+
+## 控制动画
+
+`animate()` 返回播放控制器：
+
+```tsx
+const controls = animate('.box', { x: 100 }, { duration: 2 })
+
+controls.pause()
+controls.play()
+controls.stop()
+controls.cancel()       // 重置到起始值
+controls.complete()     // 立即跳到终点
+controls.speed = 2      // 2 倍速
+controls.time = 1       // 跳到 1s 位置
+```
+
+最常用的是 `cancel()`——清理逻辑里调用，避免组件卸载后动画继续。
+
+```tsx
+useEffect(() => {
+  const controls = animate(scope.current, { rotate: 360 }, { duration: 2, repeat: Infinity })
+  return () => controls.stop()  // 清理
+}, [])
+```
+
+## 与 React state 联动
+
+```tsx filename="components/SuccessCheck.tsx"
+import { useAnimate } from 'motion/react'
+import { useEffect } from 'react'
+
+export function SuccessCheck({ show }: { show: boolean }) {
+  const [scope, animate] = useAnimate()
+
+  useEffect(() => {
+    if (show) {
+      animate([
+        ['svg', { scale: [0, 1.2, 1] }, { duration: 0.4 }],
+        ['path', { pathLength: [0, 1] }, { duration: 0.5, at: '-0.1' }],
+      ])
+    }
+  }, [show])
+
+  return (
+    <div ref={scope}>
+      <svg viewBox="0 0 24 24">
+        <path d="M 4 12 L 10 18 L 20 6" stroke="green" fill="none" strokeWidth="3" />
+      </svg>
+    </div>
+  )
+}
+```
+
+`show` 变为 `true` 时触发"先放大、再画勾"的序列。
+
+## 动态目标
+
+`animate` 第一个参数也可以是**单值动画**——不指定 DOM，只动一个数字：
+
+```tsx
+const [count, setCount] = useState(0)
+
+useEffect(() => {
+  const controls = animate(0, 100, {
+    duration: 2,
+    onUpdate: latest => setCount(Math.round(latest)),
+  })
+  return () => controls.stop()
+}, [])
+
+return <div>{count}</div>
+```
+
+数字从 0 滑到 100，`onUpdate` 接到每一帧。常用做**数字滚动**效果（不过更优雅的方案是 Motion+ 的 `<AnimateNumber>`）。
+
+## animate 函数也能独立用
+
+`animate` 不一定要从 `useAnimate` 拿——直接从 `motion/react` 导入也可以：
+
+```tsx
+import { animate } from 'motion/react'
+
+function play() {
+  animate('.box', { x: 100 }, { duration: 0.5 })
+}
+```
+
+但这种用法**没有 scope 范围**——`.box` 会匹配全文档。在 React 里推荐用 `useAnimate` 拿 scoped 版本。
+
+## 与声明式的搭配
+
+`useAnimate` 不替代 `motion.*`——它是补充。最常见的模式：
+
+- **进出场、状态切换** → 声明式 `motion.*`
+- **事件回调、序列、复杂编排** → 命令式 `useAnimate`
+
+```tsx
+function Combined() {
+  const [scope, animate] = useAnimate()
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+    >
+      <button
+        ref={scope}
+        onClick={() => {
+          animate(scope.current, { rotate: 360 }, { duration: 0.5 })
+        }}
+      >
+        点击旋转
+      </button>
+    </motion.div>
+  )
+}
+```
+
+外层用声明式入场，按钮内的旋转用命令式触发——各取所长。
+
+## 陷阱
+
+### scope 是 ref，挂到要操作的元素上
+
+```tsx
+// ❌ scope 没挂——animate 找不到元素
+const [scope, animate] = useAnimate()
+return (
+  <div>
+    <div className="box">...</div>
+  </div>
+)
+
+// ✅
+return (
+  <div ref={scope}>
+    <div className="box">...</div>
+  </div>
+)
+```
+
+### scope 内查询返回的是 NodeList
+
+如果 `.box` 匹配多个元素，**全部一起动**——这是特性不是 bug。想只动第一个用更精确的选择器或单独 ref。
+
+### animate 是异步的，await 是 Promise
+
+```tsx
+animate(scope.current, { x: 100 })  // 返回 controls 也是 thenable
+  .then(() => console.log('动画完成'))
+```
+
+或者：
+
+```tsx
+await animate(scope.current, { x: 100 })
+console.log('动画完成')
+```
+
+但**不要在 render 函数里 await**——只能在事件回调 / effect 内。
+
+### 卸载时记得停止
+
+```tsx
+useEffect(() => {
+  const controls = animate('.box', { rotate: 360 }, { repeat: Infinity })
+  return () => controls.stop()  // 不停的话内存泄漏
+}, [])
+```
+
+无限循环 / 长时动画必须在 cleanup 里 `stop()`。
+
+## 何时不要用 useAnimate
+
+- 状态驱动的简单动画 → `animate={{ ... }}` 更清晰
+- 进出场 → `<AnimatePresence>` 更省心
+- 滚动驱动 → `useScroll` + `useTransform`
+- 多个元素同步入场 → Variants + `staggerChildren`
+
+**`useAnimate` 是"声明式不够用时的逃生口"**——不要默认就用它。
+
+## 小结
+
+- `useAnimate` 返回 `[scope, animate]`，命令式触发动画
+- `scope` 既是 ref 也是查询范围——避免污染全局 DOM
+- 数组语法 + `at` 字段表达复杂序列编排（类似 GSAP timeline）
+- `animate()` 返回控制器，能 pause / stop / 跳进度 / 变速
+- 与声明式 `motion.*` 搭配最佳——常规场景声明式，特殊触发用命令式

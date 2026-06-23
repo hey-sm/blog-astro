@@ -1,0 +1,141 @@
+---
+title: Motion 简介
+description: Framer Motion 改名 Motion for React 的来龙去脉、混合引擎、Motion+ 收费层与生态全景
+---
+
+# Motion 简介
+
+**Motion for React** 是 React 生态最主流的动画库。绝大多数业务场景——按钮交互、Modal 进出、列表增删、布局变化、滚动驱动——它都能以最少的代码搞定。
+
+## 它叫什么名字
+
+这个库的名字几经变化，初学者很容易混淆：
+
+| 时期 | 库名 | 包名 | 导入路径 |
+| ---- | ---- | ---- | -------- |
+| 2018 - 2024 | Framer Motion | `framer-motion` | `framer-motion` |
+| 2024 起 | **Motion** | `motion` | `motion/react` |
+
+作者 Matt Perry 把项目从 Framer 公司剥离独立运营，重命名为 **Motion**。新名字下还包含一个**框架无关**的核心 `motion`（可在 Vue / Vanilla JS 中使用），React 部分是 `motion/react`。
+
+老包 `framer-motion` 仍在维护更新但停留在 12.x，**新项目一律用 `motion`**。本系列后续示例统一以 `motion/react` 为准。
+
+```bash
+pnpm add motion
+```
+
+```tsx
+import { motion, AnimatePresence } from 'motion/react'
+```
+
+## 它能做什么
+
+一句话概括：**给 HTML / SVG 元素加上 `initial` / `animate` / `exit` 三个 prop，元素就会在状态变化时自动播放动画。**
+
+```tsx filename="components/Hello.tsx"
+import { motion } from 'motion/react'
+
+export function Hello() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
+      Hello, Motion
+    </motion.div>
+  )
+}
+```
+
+`motion.div` / `motion.button` / `motion.path`……所有 HTML 与 SVG 标签都有"可动画"的对应组件。它接受普通元素的全部 prop，再额外接受动画相关的 prop。
+
+能力清单：
+
+- **基础动画**：进出、状态切换、关键帧
+- **手势**：`whileHover` / `whileTap` / `whileFocus` / `whileInView` / `drag`
+- **布局动画**：`layout` 自动平滑过渡布局变化、`layoutId` 共享元素动画
+- **滚动**：`useScroll` 滚动驱动、`whileInView` 入场触发
+- **编排**：Variants 父子联动、`staggerChildren` 错峰
+- **命令式**：`useAnimate` 在事件回调里手动控制
+- **SVG**：路径绘制、`viewBox` 动画
+- **无障碍**：`useReducedMotion` 自动尊重系统偏好
+
+后续每章会逐个拆解。
+
+## 混合引擎：为什么它快
+
+Motion 11 起采用**混合引擎**——动画优先用浏览器原生的 [Web Animations API (WAAPI)](https://developer.mozilla.org/docs/Web/API/Web_Animations_API) 与 [ScrollTimeline](https://developer.mozilla.org/docs/Web/API/ScrollTimeline) 跑，无法原生支持的复杂场景才回退到 JavaScript 帧驱动。
+
+| 引擎 | 适用 | 特点 |
+| ---- | ---- | ---- |
+| WAAPI（原生） | 简单的 `transform` / `opacity` 动画 | 在浏览器合成线程跑，主线程卡顿不影响 |
+| ScrollTimeline（原生） | 滚动驱动 | 滚动跟手，无主线程开销 |
+| JS 帧驱动 | layout 动画、复杂 spring、值订阅 | 灵活，可订阅每帧 |
+
+对开发者而言**这一切是透明的**——你写一样的 API，库内部决定用哪个引擎。结果是：能用原生的部分性能逼近纯 CSS 动画，复杂部分仍保留 JS 的灵活性。
+
+## 默认行为：你需要知道的两个反直觉
+
+### 1. 物理属性默认 spring
+
+`x` / `y` / `scale` / `rotate` 等**物理属性**，默认使用 spring（弹簧）动画，不是 tween（缓动）：
+
+```tsx
+// 这里没有写 transition——Motion 默认给一个 spring
+<motion.div animate={{ x: 100 }} />
+```
+
+带来的"反直觉"是动画时长不固定——spring 由刚度 / 阻尼 / 质量决定，时长会自然变化。如果你期望"恰好 0.3 秒"，需要显式给 `tween`：
+
+```tsx
+<motion.div
+  animate={{ x: 100 }}
+  transition={{ type: 'tween', duration: 0.3 }}
+/>
+```
+
+### 2. 视觉属性默认 tween
+
+`opacity` / `color` / `backgroundColor` 等**视觉属性**默认 tween，因为对它们做 spring 没有物理意义——透明度从 0 到 1 不存在"惯性"。
+
+记住一句话：**能"动"的属性默认 spring，能"渐变"的属性默认 tween。** 想统一改默认值见 [Transition 详解](/motion/motion-transition)。
+
+## Motion+：付费层
+
+Motion 主体免费开源，但有少量高级组件 / Hook 归属付费的 **Motion+**：
+
+| 类型 | 名称 | 用途 |
+| ---- | ---- | ---- |
+| 组件 | `<AnimateNumber>` | 数字滚动 |
+| 组件 | `<Carousel>` | 轮播 |
+| 组件 | `<Cursor>` | 自定义光标 |
+| 组件 | `<ScrambleText>` | 字符乱码切换效果 |
+| 组件 | `<Ticker>` | 跑马灯 |
+| 组件 | `<Typewriter>` | 打字机效果 |
+| Hook | `useCurtains` | 帷幕过渡 |
+
+业务里能用免费 API 拼出来的就用免费，确实能省工的再考虑 Motion+。本系列在 [Motion+ 付费组件](/motion/motion-plus) 章节单独介绍。
+
+## 与其他方案的对位
+
+| 方案 | 业务场景适配 | 包大小 | 学习曲线 |
+| ---- | ----------- | ------ | -------- |
+| **Motion for React** | ★★★★★ | ~40 KB（可减包） | 中 |
+| react-spring | ★★★★ | ~25 KB | 中高（物理参数） |
+| GSAP | ★★★ | ~50 KB（按需） | 高（命令式） |
+| 纯 CSS / Tailwind | ★★ | 0 | 低 |
+
+**首选 Motion for React**——除非有特殊原因（极简包大小 / 复杂时间轴叙事 / 物理感优先）。详见 [如何选型](/motion/choosing)。
+
+## 本篇之后
+
+- [安装与接入](/motion/motion-install)：在 Vite / Next / Astro 中接入 Motion
+- [你的第一个动画](/motion/motion-basics)：写一个完整的进场 / 退场示例
+
+## 小结
+
+- 包名是 `motion`，导入路径 `motion/react`，老名 `framer-motion` 仅维护
+- 混合引擎自动选择 WAAPI / ScrollTimeline / JS，开发者无感
+- 物理属性默认 spring、视觉属性默认 tween，两者都可在 `transition` 显式覆盖
+- Motion+ 是付费层，主体功能完全免费

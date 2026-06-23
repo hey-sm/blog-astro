@@ -1,0 +1,245 @@
+---
+title: Motion vs GSAP
+description: 心智模型、能力边界、TypeScript 体验、何时混用、何时只选一个
+---
+
+# Motion vs GSAP
+
+读到这里你已经分别掌握了两套工具。本章把它们摆到一起做最终决策。
+
+## 总览对比
+
+| 维度 | Motion for React | GSAP |
+| ---- | ---------------- | ---- |
+| 范式 | 声明式（状态驱动） | 命令式（API 驱动） |
+| 与 React 集成 | 原生 | 需 `@gsap/react` |
+| 包大小（gzip） | ~40 KB（可减到 15 KB） | 25 KB 起 + 插件 |
+| 学习曲线 | 平缓 | 中等 |
+| 时间轴编排 | 受限 | ⭐ 极强 |
+| 布局动画 | ⭐ `layout` / `layoutId` | Flip 插件 |
+| 滚动入场 | ⭐ `whileInView` 一行 | ScrollTrigger（杀鸡用牛刀） |
+| 滚动叙事 / pin | 不行 | ⭐ ScrollTrigger |
+| 文字逐字 | 手动拆 | ⭐ SplitText |
+| SVG 路径绘制 | `pathLength` | ⭐ DrawSVG |
+| SVG 形状变形 | 节点数需一致 | ⭐ MorphSVG 自动桥接 |
+| 沿路径运动 | ❌ | ⭐ MotionPath |
+| 拖拽 / 排序 | ⭐ `drag` + `<Reorder>` | Draggable + 手写排序 |
+| 物理（重力/抛物） | ❌ | ⭐ Physics2D |
+| TypeScript | ⭐ 优秀 | 良好 |
+| SSR | ⭐ | 需手动处理 |
+| 价格 | 主体免费 + Motion+ 付费组件 | 3.13 起全免费 |
+
+## 心智差异
+
+### Motion：状态决定动画
+
+```tsx
+const [open, setOpen] = useState(false)
+<motion.div animate={{ height: open ? 200 : 0 }} />
+```
+
+读 JSX 就知道动画——`open` 变化触发过渡。
+
+### GSAP：调用决定动画
+
+```tsx
+const handleClick = () => {
+  gsap.to('.box', { height: 200 })
+}
+```
+
+读 JSX 看不到动画——必须读 `handleClick` 才能知道发生了什么。
+
+哪种更好？看场景：
+
+- **业务工具**（按钮、表单、Modal）：Motion 更清晰
+- **叙事 / 节奏**（多元素序列、时间轴）：GSAP 更紧凑
+
+## 决策树
+
+```
+你需要什么？
+│
+├── 99% 是"组件状态变化触发的过渡"
+│   └─→ Motion 一路用到底
+│
+├── 滚动驱动的多阶段叙事 / pin 元素
+│   └─→ GSAP ScrollTrigger（主力）+ Motion（业务组件）
+│
+├── 营销页 / 创意作品集
+│   └─→ GSAP（SplitText / MorphSVG / Timeline）+ Motion（少量交互）
+│
+├── 包大小极致敏感
+│   └─→ Motion LazyMotion 或 Motion One
+│
+└── 已经有团队成员熟悉某一个
+    └─→ 沿用，不要为了"更好"而折腾迁移
+```
+
+## 何时混用
+
+很常见——同一项目里：
+
+| 场景 | 用谁 |
+| ---- | ---- |
+| 全局路由切换动画 | Motion `<AnimatePresence>` |
+| 业务页面的按钮 / Modal / Toast | Motion |
+| 列表增删 / 拖拽排序 | Motion `<Reorder>` |
+| 营销首屏的 Hero 文字动画 | GSAP SplitText + Timeline |
+| 滚动叙事章节 | GSAP ScrollTrigger |
+| 品牌 Logo 描边 | GSAP DrawSVG |
+
+**红线**：同一个 DOM 元素不要被两个库同时管 transform——它们都在写 `style.transform`，互相覆盖。
+
+具体落实方式：
+
+```tsx
+{/* 父元素由 Motion 管 */}
+<motion.section animate={{ opacity: 1 }}>
+  {/* 子元素 .text 由 GSAP 管 */}
+  <h1 className="text">...</h1>
+</motion.section>
+```
+
+## 何时只用一个
+
+**只用 Motion**（不引 GSAP）的情形：
+
+- B2B SaaS 工具、CMS 后台、控制面板
+- 内部工具站、IDE 扩展
+- 业务为主、动效辅助
+- 团队偏 React 优先思维
+
+**只用 GSAP**（不引 Motion）的情形：
+
+- 重度交互的创意作品集
+- 品牌官网（GSAP 团队也是 Webflow 的合作方）
+- 滚动叙事 SPA
+- 已有 GSAP 老项目延续
+- 多框架共用动画代码（Vue / 原生 + React）
+
+**真的需要两个**：
+
+- 大型营销站点（产品页用 Motion、Hero / 案例展示用 GSAP）
+- 内有"游戏化"或"展示模式"的业务应用
+
+## 包大小账
+
+| 组合 | 总大小（gzip） |
+| ---- | -------------- |
+| 只 Motion 完整版 | ~40 KB |
+| Motion + LazyMotion `domAnimation` | ~15 KB |
+| 只 GSAP 核心 | ~25 KB |
+| GSAP + ScrollTrigger | ~40 KB |
+| GSAP + ScrollTrigger + SplitText | ~55 KB |
+| GSAP 全家桶 | ~80 KB |
+| Motion 完整 + GSAP 核心 | ~65 KB |
+| Motion + GSAP + ScrollTrigger + SplitText | ~95 KB |
+
+包大小敏感时**先确定核心场景**——为单一插件引入 GSAP 全家桶不划算。
+
+## TypeScript 体验对比
+
+### Motion
+
+类型为 React 而设——直接享受 HTMLMotionProps 等泛型：
+
+```tsx
+import { motion, type HTMLMotionProps } from 'motion/react'
+
+type ButtonProps = HTMLMotionProps<'button'> & {
+  variant?: 'primary' | 'ghost'
+}
+```
+
+变体值 / variants 自动推断。开箱即用。
+
+### GSAP
+
+类型存在但偏向 JS 风格——配置对象用 `gsap.TweenVars`，Timeline 用 `gsap.core.Timeline`：
+
+```tsx
+const tlRef = useRef<gsap.core.Timeline | null>(null)
+const vars: gsap.TweenVars = { x: 100, duration: 1 }
+```
+
+完整但不如 Motion 在 React 场景下精致。
+
+## 团队经验视角
+
+- **新手团队**：Motion 上手快，调试容易（看 JSX 知道动画）
+- **资深团队**：GSAP 的时间轴能力换来更强表达力
+- **设计驱动团队**：GSAP 对设计师友好（Webflow 集成、ease visualizer、可视化编辑工具）
+- **业务驱动团队**：Motion 与 React 生态最贴
+
+## 性能对比
+
+两者都很快——但场景差异：
+
+| 场景 | 谁更快 |
+| ---- | ------ |
+| 单个元素简单动画 | Motion（用 WAAPI）略胜 |
+| 大量元素同时动 | GSAP（成熟的批处理） |
+| 滚动 60fps | 几乎一致 |
+| 动画期间组件 re-render | Motion 默认绕过 React 渲染（用 motion value），GSAP 也绕过 |
+
+实际项目中很少因为性能选库——选择更多是**心智 / 场景 / 团队**。
+
+## 迁移建议
+
+### 从 framer-motion 老项目迁移
+
+只需把包名 `framer-motion` 改成 `motion`，导入路径 `motion/react`——API 兼容。新功能（混合引擎、Motion+）才会用到新名。
+
+### 从纯 CSS / Tailwind 升级到 Motion
+
+平滑——CSS 动画继续用，Motion 处理 React 状态切换部分。
+
+### 从 GSAP 老项目（无 `@gsap/react`）迁移
+
+把所有 `useEffect` + `gsap.context()` 换成 `useGSAP`——代码量减半，StrictMode / SSR / cleanup 问题一并解决。具体见 [GSAP React 协作模式](/motion/gsap-react-patterns)。
+
+### 全新项目
+
+如果只能选一个，**先选 Motion**。等遇到 Motion 解决不了的场景再补 GSAP——按需引入，避免一开始就两库都装。
+
+## 误区澄清
+
+**误区 1：GSAP 包太大不适合现代项目**
+GSAP 核心 25 KB，按需引入插件——比 Motion 完整版还小。
+
+**误区 2：Motion 不够强大**
+对 95% 业务场景 Motion 都够。"强大"主要体现在罕见的复杂叙事，那种场景才需要 GSAP。
+
+**误区 3：用 GSAP 显得专业**
+工具选择应该匹配场景——杀鸡用牛刀不专业。
+
+**误区 4：必须二选一**
+混用是常态。
+
+**误区 5：GSAP 要付费**
+3.13 起全免费——之前付费的 SplitText / MorphSVG / DrawSVG / ScrollSmoother 等全部解锁。
+
+## 最终建议
+
+**默认起点**：Motion for React。
+
+**遇到这些场景时引入 GSAP**：
+
+- 复杂时间轴叙事 / 滚动 pin
+- 文字逐字 / 逐行动画
+- SVG 路径绘制 / 形状变形
+- 沿任意路径运动
+- 物理（重力 / 抛物 / 粒子）
+- 旋转拖拽 / 转盘
+- 复杂调试需求（GSDevTools）
+
+**不要为了"动效更酷"无脑引入 GSAP**——业务工具站、SaaS 后台、内部系统通常 Motion 已足够。
+
+## 小结
+
+- Motion ≈ "状态驱动 UI 动画"，GSAP ≈ "时间轴编排叙事"
+- 混用是常态——分场景使用，不要让两库管同一元素
+- 包大小、TS、SSR：Motion 略胜；时间轴 / 滚动 / 文字 / SVG：GSAP 独家
+- 全新项目从 Motion 起步——遇到瓶颈再补 GSAP
+- 选择基于"场景 + 团队 + 心智"，不是"哪个更强"

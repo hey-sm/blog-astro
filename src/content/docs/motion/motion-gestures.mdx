@@ -1,0 +1,310 @@
+---
+title: 手势交互
+description: whileHover / whileTap / whileFocus / whileInView——一行 prop 搞定按钮反馈、悬浮效果、滚入动画
+---
+
+# 手势交互
+
+按钮被点击时缩一下、卡片悬浮时浮起来、滚动到视口里时淡入——这些**临时进入某个状态**的动画，Motion 提供了一组 `while*` prop 直接搞定。
+
+## 四个 `while*` prop 一览
+
+| prop | 触发时机 | 等价 CSS | 常用场景 |
+| ---- | -------- | -------- | -------- |
+| `whileHover` | 鼠标悬浮 | `:hover` | 按钮浮起、卡片放大 |
+| `whileTap` | 鼠标按下 / 触屏按下 | `:active` | 按钮按压反馈 |
+| `whileFocus` | 元素获得焦点 | `:focus-visible` | 输入框、可聚焦按钮 |
+| `whileInView` | 滚入视口 | 无（需 IntersectionObserver） | 滚动入场、懒加载动画 |
+| `whileDrag` | 正在拖拽 | 无 | 拖拽中放大、变色 |
+
+它们都接受**和 `animate` 一样的对象**——指定目标状态，松开 / 离开后自动回到 `animate` 状态。
+
+## whileHover
+
+```tsx
+import { motion } from 'motion/react'
+
+<motion.button
+  whileHover={{ scale: 1.05 }}
+  whileTap={{ scale: 0.95 }}
+>
+  点我
+</motion.button>
+```
+
+鼠标进入 → `scale: 1.05`；离开 → 自动回到默认 `scale: 1`。**不用写离开的动画**，Motion 自动反向播放。
+
+### 多个属性同时变化
+
+```tsx
+<motion.div
+  whileHover={{
+    scale: 1.05,
+    rotate: 2,
+    boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+  }}
+  transition={{ duration: 0.2 }}
+>
+  Hover me
+</motion.div>
+```
+
+### 带过渡曲线
+
+`while*` 也能配自己的 `transition`：
+
+```tsx
+<motion.div
+  whileHover={{
+    scale: 1.1,
+    transition: { type: 'spring', stiffness: 300 },
+  }}
+/>
+```
+
+外层 `transition` 给离开用，`whileHover` 内嵌 `transition` 给进入用——这样可以"快进慢出"。
+
+## whileTap
+
+```tsx
+<motion.button
+  whileHover={{ scale: 1.05 }}
+  whileTap={{ scale: 0.92 }}
+>
+  Submit
+</motion.button>
+```
+
+`whileTap` 同时覆盖**鼠标按下**和**触屏按下**——移动端不需要额外处理。
+
+### 优先级
+
+`whileTap` > `whileHover` > `animate`。同时按下和悬浮时，按下状态生效。
+
+## whileFocus
+
+可聚焦元素（`<button>` / `<input>` / `<a>` / `tabIndex >= 0`）获得焦点时触发：
+
+```tsx filename="components/Input.tsx"
+<motion.input
+  className="border rounded px-3 py-2"
+  whileFocus={{
+    scale: 1.02,
+    borderColor: '#3b82f6',
+  }}
+/>
+```
+
+无障碍友好——键盘 Tab 切换时也会触发。
+
+## whileInView
+
+元素**滚入视口**时触发，最常用于"滚动入场"动画：
+
+```tsx
+<motion.div
+  initial={{ opacity: 0, y: 50 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.5 }}
+>
+  我会在滚到视口里时淡入
+</motion.div>
+```
+
+注意要配 `initial`——元素在视口外时长什么样。
+
+### viewport 配置
+
+```tsx
+<motion.div
+  initial={{ opacity: 0 }}
+  whileInView={{ opacity: 1 }}
+  viewport={{
+    once: true,           // 只触发一次（默认 false，会反复触发）
+    amount: 0.5,          // 元素 50% 可见时触发（默认 'some'，即任意像素可见）
+    margin: '-100px',     // 视口收缩 100px 才算"进入"
+  }}
+/>
+```
+
+| 配置 | 含义 |
+| ---- | ---- |
+| `once: true` | 进入一次后不再触发（推荐——避免来回滚反复闪烁） |
+| `amount: 'some' \| 'all' \| 0..1` | 多少比例可见时触发 |
+| `margin: string` | CSS margin 写法，正值扩大视口、负值收缩 |
+| `root: RefObject` | 自定义滚动容器（默认是浏览器视口） |
+
+### 列表错峰入场
+
+配合 `transition` 的 `delay` 让多个元素错开：
+
+```tsx
+{items.map((item, i) => (
+  <motion.div
+    key={item.id}
+    initial={{ opacity: 0, y: 30 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.4, delay: i * 0.1 }}
+  >
+    {item.title}
+  </motion.div>
+))}
+```
+
+更优雅的做法是用 [Variants](/motion/motion-variants) 的 `staggerChildren`，下一章会讲。
+
+## 组合用法
+
+```tsx filename="components/Card.tsx"
+<motion.article
+  initial={{ opacity: 0, y: 20 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  whileHover={{ y: -8, boxShadow: '0 16px 40px rgba(0,0,0,0.12)' }}
+  whileTap={{ scale: 0.98 }}
+  viewport={{ once: true, amount: 0.3 }}
+  transition={{ duration: 0.3 }}
+  className="rounded-lg p-6 bg-white"
+>
+  <h3>标题</h3>
+  <p>内容</p>
+</motion.article>
+```
+
+- 滚到视口 → 淡入上移
+- 悬浮 → 轻微上浮 + 阴影加深
+- 点击 → 缩小一点
+
+四个状态独立配置，Motion 自动合成。
+
+## 事件回调
+
+每个 `while*` 都有对应的开始 / 结束回调：
+
+```tsx
+<motion.div
+  whileHover={{ scale: 1.05 }}
+  onHoverStart={() => console.log('鼠标进入')}
+  onHoverEnd={() => console.log('鼠标离开')}
+  onTap={() => console.log('点击')}
+  onTapStart={() => console.log('按下')}
+  onTapCancel={() => console.log('按下后拖出')}
+/>
+```
+
+### onTap vs onClick
+
+`onTap` 比 `onClick` 更可靠——它会忽略**按下后拖走**的情况（这种通常是误触）。Motion 鼓励用 `onTap` 替代 `onClick`。
+
+但如果元素没有 `whileTap`，原生 `onClick` 也够用。
+
+## 进入视口的更多回调
+
+```tsx
+<motion.div
+  whileInView={{ opacity: 1 }}
+  onViewportEnter={() => console.log('进入')}
+  onViewportLeave={() => console.log('离开')}
+/>
+```
+
+可以用来触发埋点、懒加载图片等副作用。
+
+## 陷阱
+
+### `whileHover` 在触屏上不会触发
+
+触屏没有"悬浮"概念。只用 `whileHover` 的设计，触屏用户体验不到。补 `whileTap`。
+
+### `whileInView` 不需要 once 时会闪
+
+如果省略 `viewport: { once: true }`，元素离开视口又回来时会**再次播放入场动画**。来回滚一次就闪一次，体验差。**默认加 `once: true`**。
+
+### `whileTap` 和 `<button>` 自带的 `:active` 冲突
+
+如果按钮已经有 CSS `:active` 样式（比如 Tailwind 的 `active:scale-95`），它会和 `whileTap` 抢——同一个 transform 被两边写，行为不可预测。**二选一**，推荐用 `whileTap`，可控性更好。
+
+### 嵌套元素的事件冒泡
+
+```tsx
+<motion.div whileHover={{ scale: 1.05 }}>
+  <motion.button whileHover={{ scale: 1.1 }}>
+    嵌套按钮
+  </motion.button>
+</motion.div>
+```
+
+鼠标移到内层按钮时，**外层 `whileHover` 仍然激活**——hover 不会因为内层接管而停止。多数情况下这是想要的行为；如果不想，外层别用 `whileHover`，改用 `onHoverStart` + 状态。
+
+### 需要 `tabIndex` 才能 focus
+
+`<div>` 默认不可聚焦。要让 `whileFocus` 生效，加 `tabIndex={0}`：
+
+```tsx
+<motion.div tabIndex={0} whileFocus={{ scale: 1.02 }} />
+```
+
+或者直接用 `<button>` / `<input>` / `<a href>`。
+
+## 配方：浮起的卡片
+
+```tsx filename="components/HoverCard.tsx"
+<motion.div
+  whileHover={{
+    y: -6,
+    boxShadow: '0 12px 24px rgba(0,0,0,0.1)',
+  }}
+  transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+  className="rounded-xl bg-white p-6"
+>
+  ...
+</motion.div>
+```
+
+## 配方：按钮按压反馈
+
+```tsx filename="components/Button.tsx"
+<motion.button
+  whileHover={{ scale: 1.04 }}
+  whileTap={{ scale: 0.96 }}
+  transition={{ duration: 0.15 }}
+  className="px-4 py-2 rounded bg-blue-600 text-white"
+>
+  点我
+</motion.button>
+```
+
+## 配方：滚动入场（一行式）
+
+```tsx filename="components/Reveal.tsx"
+import { motion, type ReactNode } from 'motion/react'
+
+export function Reveal({ children }: { children: ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.3 }}
+      transition={{ duration: 0.5 }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+// 使用
+<Reveal>
+  <h2>标题</h2>
+  <p>内容</p>
+</Reveal>
+```
+
+封装成小组件，整个站点的"滚入淡入"就一行搞定。
+
+## 小结
+
+- `whileHover` / `Tap` / `Focus` / `InView` 是 Motion 的"状态快捷方式"
+- 离开状态 → 自动反向回到 `animate`，不用写两遍
+- `whileInView` 默认加 `once: true`，避免来回闪烁
+- 触屏没有 hover——交互按钮一定补 `whileTap`
+- 复杂列表错峰入场用 [Variants](/motion/motion-variants) 的 `staggerChildren` 更优雅

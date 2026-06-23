@@ -1,0 +1,199 @@
+---
+title: 动画系列导读
+description: Framer Motion (Motion for React) 与 GSAP 在 React 下的完整指南，面向零基础开发者
+---
+
+import Markmap from '@components/Markmap.astro';
+
+export const motionTree = `
+# 动画 (Motion & GSAP)
+- 入门
+  - 你需要先知道的
+    - CSS transform / transition
+    - requestAnimationFrame
+    - useRef / useEffect
+  - 动画基础概念
+    - 关键帧
+    - 缓动函数
+    - 合成层
+    - 60fps 的来历
+  - 如何选型
+    - CSS
+    - Motion
+    - GSAP
+    - react-spring
+- Motion for React
+  - 简介与安装
+    - 改名历史
+    - Motion+
+    - 混合引擎
+  - 基础动画
+    - initial / animate / exit
+    - Transition 详解
+    - 关键帧动画
+  - 进出场与交互
+    - AnimatePresence
+    - 手势
+    - 拖拽与 Reorder
+  - 布局动画
+    - layout prop
+    - layoutId 共享元素
+    - LayoutGroup
+  - 编排与值
+    - Variants
+    - Motion Values
+    - useAnimate 命令式
+  - 滚动与 SVG
+    - useScroll
+    - whileInView
+    - SVG 路径绘制
+  - 进阶
+    - LazyMotion 减包
+    - MotionConfig
+    - useReducedMotion
+  - Motion+ 付费组件
+- GSAP
+  - 简介与安装
+    - Webflow 收购
+    - 3.13 全部免费
+    - useGSAP
+  - Tween 与 Timeline
+    - to / from / fromTo
+    - 链式编排
+    - 相对位置
+  - 缓动
+    - 内置 ease
+    - CustomEase
+    - CustomBounce
+  - 滚动
+    - ScrollTrigger
+    - ScrollSmoother
+  - 文字
+    - SplitText 3.13
+    - ScrambleText
+    - TextPlugin
+  - SVG
+    - MotionPath
+    - DrawSVG
+    - MorphSVG
+  - 交互
+    - Draggable + Inertia
+    - Observer
+    - Flip
+  - 物理与调试
+    - Physics2D
+    - GSDevTools
+  - React 协作模式
+- 综合
+  - 对比与选型
+  - 实战配方
+  - 性能与无障碍
+`;
+
+# 动画系列导读
+
+本系列覆盖 React 下最主流的两套动画方案——**Motion for React**（原 Framer Motion）和 **GSAP**——从零基础到工程实战。
+
+<Markmap markdown={motionTree} />
+
+## 为什么把这两个放在一起
+
+| 方案 | 心智模型 | 包大小 | 强项 |
+| ---- | -------- | ------ | ---- |
+| Motion for React | 声明式、组件化 | ~40 KB | 业务交互、布局动画、手势、滚动 |
+| GSAP | 命令式、时间轴 | ~50 KB（按需） | 复杂时间轴、SVG、营销动效、滚动叙事 |
+
+两者**不冲突**——同一个项目里通常用 Motion 写业务交互（按钮、Modal、列表），用 GSAP 写需要精细时间轴的 Hero / 滚动故事段落。本系列分别讲透，最后给出选型与混用方案。
+
+## 阅读路径
+
+### 零基础
+
+按章节顺序读。前 3 章先把 CSS 动画、`requestAnimationFrame`、合成层这些前置知识补齐，再进入 Motion。
+
+### 有一定 React 经验
+
+跳过第 1、2 章，从 [如何选型](/motion/choosing) 开始。Motion 入门后可直接看 [布局动画](/motion/motion-layout) 和 [Variants 编排](/motion/motion-variants) ——这两个是 Motion 的杀手锏。
+
+### 来做营销页 / 滚动叙事
+
+直接跳到 GSAP 篇的 [ScrollTrigger](/motion/gsap-scroll-trigger) 与 [SplitText](/motion/gsap-split-text)。
+
+## 章节地图
+
+### 入门篇
+
+| # | 主题 | 内容 |
+| - | ---- | ---- |
+| 1 | [你需要先知道的](/motion/prerequisites) | CSS 动画速览、`requestAnimationFrame`、React 钩子速通 |
+| 2 | [动画基础概念](/motion/animation-fundamentals) | 关键帧、缓动函数、合成层、60fps 的来历 |
+| 3 | [如何选型](/motion/choosing) | CSS / Motion / GSAP / react-spring 决策树 |
+
+### Motion for React 篇
+
+| # | 主题 | 内容 |
+| - | ---- | ---- |
+| 4 | [Motion 简介](/motion/motion-introduction) | 改名历史、Motion+、混合引擎 |
+| 5 | [安装与接入](/motion/motion-install) | Vite / Next / Astro 三种环境装配 |
+| 6 | [你的第一个动画](/motion/motion-basics) | `initial` / `animate` / `exit` / `transition` |
+| 7 | [Transition 详解](/motion/motion-transition) | spring vs tween、缓动函数 |
+| 8 | [关键帧动画](/motion/motion-keyframes) | 数组语法、`times`、`repeat`、`yoyo` |
+| 9 | [进出场动画](/motion/motion-presence) | `<AnimatePresence>`、`mode`、嵌套退场 |
+| 10 | [手势交互](/motion/motion-gestures) | `whileHover` / `Tap` / `Focus` / `InView` |
+| 11 | [拖拽专题](/motion/motion-drag) | `drag`、约束、`useDragControls`、`<Reorder>` |
+| 12 | [布局动画](/motion/motion-layout) | `layout` prop、`layoutId`、FLIP 原理 |
+| 13 | [Variants 编排](/motion/motion-variants) | 命名状态、父子传递、`staggerChildren` |
+| 14 | [Motion Values](/motion/motion-values) | `useMotionValue` / `useTransform` / `useSpring` |
+| 15 | [useAnimate 命令式](/motion/motion-use-animate) | 命令式 API、与 ref 协作、序列动画 |
+| 16 | [滚动驱动](/motion/motion-scroll) | `useScroll`、视差、进度条 |
+| 17 | [SVG 动画](/motion/motion-svg) | 路径绘制、`viewBox` 动画 |
+| 18 | [进阶能力](/motion/motion-advanced) | `<LazyMotion>` 减包、`<MotionConfig>`、`useReducedMotion` |
+| 19 | [Motion+ 付费组件](/motion/motion-plus) | `<Cursor>` / `<Typewriter>` / `<Carousel>` |
+
+### GSAP 篇
+
+| # | 主题 | 内容 |
+| - | ---- | ---- |
+| 20 | [GSAP 简介](/motion/gsap-introduction) | Webflow 收购、3.13、全部免费 |
+| 21 | [安装与 React 集成](/motion/gsap-install) | `@gsap/react` 的 `useGSAP`、StrictMode |
+| 22 | [Tween 基础](/motion/gsap-tween) | `to` / `from` / `fromTo` / `set`、`stagger` |
+| 23 | [Timeline 编排](/motion/gsap-timeline) | 链式、相对位置、嵌套、labels |
+| 24 | [缓动深入](/motion/gsap-easing) | 内置 ease、CustomEase、CustomBounce |
+| 25 | [ScrollTrigger](/motion/gsap-scroll-trigger) | `scrub` / `pin` / cleanup |
+| 26 | [ScrollSmoother](/motion/gsap-scroll-smoother) | 平滑滚动 |
+| 27 | [SplitText 3.13](/motion/gsap-split-text) | 文字逐字 / 逐行动画、a11y、`autoSplit` |
+| 28 | [MotionPath](/motion/gsap-motion-path) | 沿路径动画 |
+| 29 | [DrawSVG](/motion/gsap-draw-svg) | SVG 描边动画 |
+| 30 | [MorphSVG](/motion/gsap-morph-svg) | SVG 形状变形 |
+| 31 | [Flip](/motion/gsap-flip) | FLIP 动画方案 |
+| 32 | [Draggable + Inertia](/motion/gsap-draggable) | 拖拽与惯性 |
+| 33 | [Observer](/motion/gsap-observer) | 统一鼠标 / 触摸 / 滚轮 |
+| 34 | [文字效果](/motion/gsap-text-effects) | ScrambleText、TextPlugin |
+| 35 | [物理动画](/motion/gsap-physics) | Physics2D、PhysicsProps |
+| 36 | [GSDevTools](/motion/gsap-devtools) | 时间轴可视化调试 |
+| 37 | [React 协作模式](/motion/gsap-react-patterns) | `contextSafe`、ref、卸载清理 |
+
+### 综合篇
+
+| # | 主题 | 内容 |
+| - | ---- | ---- |
+| 38 | [Motion vs GSAP](/motion/comparison) | 心智、能力、TS、何时混用 |
+| 39 | [实战配方](/motion/recipes) | Modal、列表、路由切换、Hero、SVG morph |
+| 40 | [性能与无障碍](/motion/performance) | 合成层、`prefers-reduced-motion`、SR |
+
+## 排版约定
+
+- API 签名使用 TypeScript 形式呈现
+- 关键示例使用文件名标注：
+
+  ```tsx filename="components/Box.tsx"
+  // ...
+  ```
+
+- 反直觉行为单列"陷阱"小节，给出"为什么 + 如何修"
+- 凡是 Motion+ 付费组件、GSAP 此前 Club 专享但已免费的插件，都明确标注
+- 包名一律用最新名：Motion 用 `motion/react`，GSAP React 用 `@gsap/react`
+
+## 起点
+
+请从 [你需要先知道的](/motion/prerequisites) 开始。已熟悉 CSS 动画与 React Hooks 的读者，可直接跳到 [如何选型](/motion/choosing)。

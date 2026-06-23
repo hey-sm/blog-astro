@@ -1,0 +1,389 @@
+---
+title: SplitText 3.13
+description: 把文字拆成字符 / 单词 / 行，逐个动画——3.13 重写版的 autoSplit、onSplit、a11y
+---
+
+# SplitText 3.13
+
+`SplitText` 把段落 / 标题拆成**单独可动画的字符 / 单词 / 行**——这是营销页"文字逐字浮现"的标准实现。
+
+3.13 重写了 SplitText：**包体减少 50%**，新增 a11y 自动处理、`autoSplit` 响应式重拆、`onSplit` 钩子、`depSlice` 嵌套元素处理等 14 项改动。
+
+> 这个插件曾是 Club GSAP 会员独享，3.13 起免费可商用。
+
+## 安装
+
+```tsx
+import gsap from 'gsap'
+import { SplitText } from 'gsap/SplitText'
+
+gsap.registerPlugin(SplitText)
+```
+
+## 第一个示例
+
+```tsx filename="components/RevealTitle.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { SplitText } from 'gsap/SplitText'
+import { useRef } from 'react'
+
+gsap.registerPlugin(SplitText)
+
+export function RevealTitle() {
+  const container = useRef<HTMLElement>(null)
+
+  useGSAP(
+    () => {
+      const split = new SplitText('.title', { type: 'chars' })
+
+      gsap.from(split.chars, {
+        y: 50,
+        opacity: 0,
+        duration: 0.6,
+        stagger: 0.03,
+        ease: 'power3.out',
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <h1 ref={container} className="title">
+      Welcome to GSAP
+    </h1>
+  )
+}
+```
+
+效果：每个字符依次浮现——比简单的"整段淡入"高级很多。
+
+## 拆分类型
+
+```tsx
+new SplitText('.title', { type: 'chars, words, lines' })
+```
+
+| type | 含义 | 访问 |
+| ---- | ---- | ---- |
+| `'chars'` | 每个字符独立 | `split.chars` |
+| `'words'` | 每个单词独立 | `split.words` |
+| `'lines'` | 每一行独立（按视觉换行） | `split.lines` |
+
+可以**组合**多种——同时拆字符 + 单词，外层包裹结构都保留：
+
+```tsx
+const split = new SplitText('.title', { type: 'chars, words' })
+// split.chars 是所有字符
+// split.words 是所有单词
+```
+
+### 中文字符的处理
+
+英文按空格分词，中文每个汉字就是一个 char。`words` 在中文里基本等同 `chars`——常用 `chars` 即可。
+
+## stagger 控制节奏
+
+```tsx
+gsap.from(split.chars, {
+  y: 40,
+  opacity: 0,
+  duration: 0.5,
+  stagger: 0.03,
+})
+```
+
+`stagger: 0.03` 每个字符相隔 30ms——50 字以内观感很好。
+
+### 高级 stagger
+
+```tsx
+stagger: {
+  each: 0.03,
+  from: 'random',    // 随机顺序
+  ease: 'power2.in',
+}
+```
+
+`from` 选项：
+
+- `'start'` / `'end'`：正序 / 倒序
+- `'center'` / `'edges'`：从中心 / 从两端
+- `'random'`：随机
+- `[x, y]`：从某个坐标的元素开始扩散
+- 数字索引：从第 N 个元素开始
+
+## SplitText 实例方法
+
+```tsx
+const split = new SplitText('.title', { type: 'chars' })
+
+split.chars        // 拆出来的字符数组
+split.words
+split.lines
+
+split.revert()     // 恢复原始 HTML（关键 cleanup）
+split.split({ type: 'chars, words' })  // 重新拆
+```
+
+### cleanup 很重要
+
+```tsx
+useGSAP(
+  () => {
+    const split = new SplitText('.title', { type: 'chars' })
+    gsap.from(split.chars, { y: 40, opacity: 0, stagger: 0.03 })
+
+    return () => split.revert()   // 卸载时还原 DOM
+  },
+  { scope: container }
+)
+```
+
+不 revert 的话，每次组件挂载都会嵌套包裹新的 `<span>`——DOM 越长越乱。`useGSAP` 不会自动 revert SplitText，必须手动。
+
+## autoSplit：响应式重拆
+
+3.13 新增——窗口尺寸变化时自动重新拆 line（因为 line 是按视觉换行算的，窗口窄了 line 数会变）：
+
+```tsx
+const split = new SplitText('.title', {
+  type: 'chars, lines',
+  autoSplit: true,            // 重新拆
+  onSplit: (self) => {        // 重拆后的回调
+    gsap.from(self.chars, { y: 30, opacity: 0, stagger: 0.02 })
+  },
+})
+```
+
+不用 `autoSplit` 时，浏览器变窄但 line 数据还是旧的——动画会跑错。**响应式页面强烈推荐打开**。
+
+## onSplit 回调
+
+只要重新拆就触发——首次创建、`autoSplit` 触发、手动 `split.split(...)` 都会调用：
+
+```tsx
+new SplitText('.title', {
+  type: 'chars',
+  onSplit: (self) => {
+    // self.chars 已就绪
+    gsap.set(self.chars, { opacity: 0 })  // 重置状态
+    gsap.from(self.chars, { y: 30, opacity: 0, stagger: 0.02 })
+  },
+})
+```
+
+把动画逻辑放进 `onSplit` 里——既处理首次也处理重拆。
+
+## 无障碍（a11y）
+
+3.13 SplitText 自动处理：
+
+- 整个原始文本作为 `aria-label`——屏幕阅读器读完整句子
+- 拆出的 `<span>` 加 `aria-hidden="true"`——避免被逐字朗读
+
+```html
+<!-- 原 -->
+<h1>Hello World</h1>
+
+<!-- SplitText 后 -->
+<h1 aria-label="Hello World">
+  <span aria-hidden="true">H</span>
+  <span aria-hidden="true">e</span>
+  ...
+</h1>
+```
+
+之前要手写处理才能 a11y——3.13 默认开。良心更新。
+
+## depSlice：嵌套元素
+
+某段文字里有 `<strong>` / `<a>` / `<em>` 等内联元素，普通 SplitText 会破坏它们。3.13 新增 `depSlice` 选项保留：
+
+```tsx
+new SplitText('.intro', {
+  type: 'words',
+  depSlice: '<strong>, <a>',   // 这些标签内的内容作为整体处理
+})
+```
+
+`<strong>` 内的多个单词作为一个整体——保留语义和样式。
+
+## masking：剪裁透出效果
+
+经典效果：每个字符**被裁切**，从字框下方滑出：
+
+```tsx
+new SplitText('.title', {
+  type: 'chars',
+  mask: 'chars',   // 给每个 char 加一层 overflow: hidden 的包裹
+  onSplit: (self) => {
+    gsap.from(self.chars, { yPercent: 100, stagger: 0.02 })
+  },
+})
+```
+
+效果：字符像从地下"长出来"——比简单的 y + opacity 更精致。
+
+> `mask` 也可以传 `'lines'` / `'words'` 等。
+
+## propIndex：CSS 变量索引
+
+让每个拆出的元素自动得到一个 CSS 变量（如 `--index: 0`、`--index: 1`），便于 CSS 端配合：
+
+```tsx
+new SplitText('.title', { type: 'chars', propIndex: true })
+```
+
+```css
+.title > span {
+  transform: translateY(calc(var(--index) * 4px));
+}
+```
+
+复杂的 CSS-driven 动画下有用。
+
+## 实战：完整入场动画
+
+```tsx filename="components/HeroIntro.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { SplitText } from 'gsap/SplitText'
+import { useRef } from 'react'
+
+gsap.registerPlugin(SplitText)
+
+export function HeroIntro() {
+  const container = useRef<HTMLElement>(null)
+
+  useGSAP(
+    () => {
+      const heading = new SplitText('.heading', {
+        type: 'chars, lines',
+        mask: 'lines',
+        autoSplit: true,
+        onSplit: (self) => {
+          gsap.from(self.chars, {
+            yPercent: 100,
+            duration: 0.8,
+            stagger: 0.02,
+            ease: 'power4.out',
+          })
+        },
+      })
+
+      const subtitle = new SplitText('.subtitle', { type: 'words' })
+      gsap.from(subtitle.words, {
+        opacity: 0,
+        y: 20,
+        duration: 0.5,
+        stagger: 0.05,
+        delay: 0.6,
+        ease: 'power2.out',
+      })
+
+      return () => {
+        heading.revert()
+        subtitle.revert()
+      }
+    },
+    { scope: container }
+  )
+
+  return (
+    <section ref={container}>
+      <h1 className="heading">Welcome to the future of motion design</h1>
+      <p className="subtitle">Built with GSAP 3.13 and Motion</p>
+    </section>
+  )
+}
+```
+
+## 与 ScrollTrigger 配合
+
+文字滚到视口时才逐字浮现：
+
+```tsx
+useGSAP(() => {
+  const split = new SplitText('.title', { type: 'chars' })
+
+  gsap.from(split.chars, {
+    y: 40,
+    opacity: 0,
+    stagger: 0.02,
+    scrollTrigger: {
+      trigger: '.title',
+      start: 'top 80%',
+    },
+  })
+
+  return () => split.revert()
+}, { scope: container })
+```
+
+## 陷阱
+
+### 忘记 revert 导致 DOM 累积
+
+```tsx
+useGSAP(() => {
+  new SplitText('.title', { type: 'chars' })
+  // 没有 return () => split.revert()
+}, { scope: container })
+```
+
+`useGSAP` 自动清理 tween 但**不会 revert SplitText**。组件多次挂载后 DOM 嵌套累积——记得返回 cleanup。
+
+### 字体加载导致 line 错位
+
+按视觉换行拆 line 时，字体未加载完成则按 fallback 字体测量——加载完后实际换行点变了，line 与原文不对齐。
+
+解决：等字体加载完再 split：
+
+```tsx
+useGSAP(async () => {
+  await document.fonts.ready
+  const split = new SplitText('.title', { type: 'lines' })
+  // ...
+})
+```
+
+或加 `autoSplit: true`——字体加载完后会自动重拆。
+
+### 中文标点的换行问题
+
+CSS 默认不在中文标点处换行——`smartWrap: true` 帮助处理：
+
+```tsx
+new SplitText('.title', { type: 'chars', smartWrap: true })
+```
+
+## 与 Motion 的对比
+
+Motion 没有原生的"逐字"工具——你得手动 `text.split('').map(c => <motion.span>{c}</motion.span>)`：
+
+```tsx
+{text.split('').map((c, i) => (
+  <motion.span
+    key={i}
+    initial={{ opacity: 0, y: 30 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: i * 0.03 }}
+  >
+    {c}
+  </motion.span>
+))}
+```
+
+能做但麻烦——还要处理空格、line break、a11y。**做逐字动画请用 GSAP SplitText**——这是它压倒性的优势。
+
+## 小结
+
+- SplitText 把文字拆成字符 / 单词 / 行，逐个独立动画
+- 3.13 重写：包体减半、自动 a11y、`autoSplit` 响应式重拆
+- 拆 `'chars, words, lines'` 任意组合
+- `onSplit` 回调放动画逻辑——同时处理首次和重拆
+- `mask: 'chars'` 实现"字框裁切露出"效果
+- 必须**手动 revert**——`useGSAP` 不自动清理
+- 字体加载未完成时拆 lines 会错位，等 `document.fonts.ready`
+- 营销页、Hero 标题的标配——Motion 没有等价物

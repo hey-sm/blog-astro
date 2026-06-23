@@ -1,0 +1,350 @@
+---
+title: 性能与无障碍
+description: 合成层、will-change、prefers-reduced-motion、SR 闪烁、首屏成本——动画的工程底线
+---
+
+# 性能与无障碍
+
+动画做得好看不难——做得**快、稳、无障碍**才是工程能力。这一章汇总性能与 a11y 相关的全部要点。
+
+## 性能金科玉律
+
+### 1. 优先动画 `transform` 和 `opacity`
+
+这两个属性只触发 **Composite** 阶段——由 GPU 处理，不会引发 layout / paint，60fps 几乎零成本。
+
+| 属性 | 触发到哪一步 |
+| ---- | ------------ |
+| `transform` (translate/scale/rotate/skew) | Composite ✅ |
+| `opacity` | Composite ✅ |
+| `filter` / `backdrop-filter` | Composite + GPU |
+| `width` / `height` / `top` / `left` / `margin` / `padding` | Layout（最贵） |
+| `color` / `background` / `box-shadow` | Paint |
+
+```tsx
+{/* ❌ 触发 layout */}
+<motion.div animate={{ width: 200, left: 100 }} />
+
+{/* ✅ 等效但更快 */}
+<motion.div animate={{ scaleX: 2, x: 100 }} />
+```
+
+需要做"宽度变化"时考虑 `scaleX`——用 transform-origin 控制锚点。
+
+### 2. 用 `will-change` 提示浏览器
+
+预告"这个元素马上要动"——浏览器会**提前**创建合成层：
+
+```css
+.card { will-change: transform; }
+```
+
+但**别滥用**——每多一个图层就多一份内存开销。仅对真正频繁动画的元素加，动画结束建议移除：
+
+```tsx
+onAnimationComplete={() => {
+  el.style.willChange = 'auto'
+}}
+```
+
+> Motion 自动给动画中的元素加 `will-change`——多数场景你不需要手写。
+
+### 3. 避免在动画期间触发 React 渲染
+
+`useState` + 频繁 `setState` 会触发 React 重渲染——60fps 下每秒 60 次重渲染等于卡爆。
+
+```tsx
+{/* ❌ 每帧 setState */}
+const [x, setX] = useState(0)
+useEffect(() => {
+  const id = setInterval(() => setX(prev => prev + 1), 16)
+}, [])
+<div style={{ transform: `translateX(${x}px)` }} />
+```
+
+```tsx
+{/* ✅ Motion Value 不触发渲染 */}
+const x = useMotionValue(0)
+useEffect(() => {
+  const id = setInterval(() => x.set(x.get() + 1), 16)
+}, [x])
+<motion.div style={{ x }} />
+```
+
+详见 [Motion Values](/motion/motion-values)。
+
+### 4. 大列表用虚拟化
+
+10 个项目的列表可以全部 layout 动画；1000 个项目同时 layout——直接卡死。
+
+- 超长列表用 [react-virtuoso](https://virtuoso.dev) / [TanStack Virtual](https://tanstack.com/virtual)
+- 让动画只对**可见区域**的元素生效
+
+### 5. 减少同时进行的复杂动画
+
+每帧浏览器要算所有动画——同时跑 100 个 `whileHover` 没问题，但同时跑 100 个 `layout` 一定卡。
+
+- 视口外的动画暂停（`whileInView` 默认就是按需触发）
+- 装饰动画在用户操作时降级（鼠标 hover 暂停背景动画）
+
+## 60fps 检查清单
+
+写完动画后用 Chrome DevTools **Performance** 面板录一段——关注：
+
+- **FPS 区**：60fps 直线，红色掉帧 = 问题
+- **Main 线程**：长任务（红色三角）说明 JS 阻塞
+- **Layers**：动画元素是否在独立层
+- **Compositor**：动画是否完全交给合成器
+
+掉帧时排查顺序：
+
+1. 是否动画了 width / height / top / left？换 transform
+2. 大列表 layout 动画？虚拟化或减少
+3. 频繁 setState？换 Motion Value
+4. 复杂 box-shadow / filter？降低复杂度
+
+## SSR 与首屏
+
+### 1. 防止 hydration 闪烁
+
+服务端渲染时 Motion 会序列化 `initial` 状态：
+
+```tsx
+<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
+```
+
+服务端输出 `style="opacity: 0"`——首屏直接看到隐藏，然后 JS 启动播放 `0 → 1`。
+
+**问题**：JS 没加载完时用户看到的是隐藏内容——首屏感知慢。
+
+**解决**：
+
+- 关键首屏内容不要用 `initial: { opacity: 0 }`——让它默认可见，动画从 `animate` 开始
+- 或用 `initial={false}` 跳过初始状态序列化
+
+```tsx
+<motion.div initial={false} animate={{ opacity: 1 }} />
+```
+
+### 2. 首屏 JS 预算
+
+Motion 完整版 ~40 KB——加 GSAP + ScrollTrigger 又 +40 KB。如果首屏关键 JS 已经紧张：
+
+- Motion 用 `<LazyMotion>` 减包到 15 KB
+- GSAP 用动态 import 把首屏不用的插件延后
+- Astro / 静态网站用 `client:visible` 等惰性 hydration
+
+### 3. 字体加载导致重排
+
+字体未加载完成时浏览器用 fallback 渲染——加载完成后实际宽度变了，文字动画位置全错位。
+
+```tsx
+useGSAP(async () => {
+  await document.fonts.ready
+  const split = new SplitText('.title', { type: 'lines' })
+  // ...
+})
+```
+
+或 SplitText 加 `autoSplit: true` 自动响应。
+
+## 无障碍
+
+### 1. 尊重 `prefers-reduced-motion`
+
+部分用户开启了系统的"减少动画"偏好（前庭功能障碍、晕动症需求）。**良好的应用必须尊重这个偏好**。
+
+#### CSS 后备（必须有）
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+```
+
+放在全局 CSS 里——这是兜底，所有 CSS 动画自动失效。
+
+#### Motion 的 `<MotionConfig>`
+
+```tsx
+import { MotionConfig } from 'motion/react'
+
+function App() {
+  return (
+    <MotionConfig reducedMotion="user">
+      <Routes />
+    </MotionConfig>
+  )
+}
+```
+
+`reducedMotion="user"` 跟随系统偏好——Motion 自动禁用位移 / 缩放等"会引起晕动"的动画，**保留 opacity 渐变**（信息变化仍需要被看见）。
+
+#### GSAP 手动判断
+
+```tsx
+useGSAP(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  gsap.to('.box', {
+    x: reduce ? 0 : 100,
+    duration: reduce ? 0 : 0.5,
+  })
+}, { scope: container })
+```
+
+GSAP 没有内置开关——自己读 media query。
+
+### 2. 避免动画干扰阅读
+
+| 情境 | 不要做 |
+| ---- | ------ |
+| 用户正在读长文 | 无限循环的背景动画 |
+| 表单填写中 | 字段周围反复抖动 |
+| 视频播放页 | 浮动按钮反复弹跳 |
+| 列表浏览 | 滚动时元素左右晃 |
+
+动画是"调味"——不是主菜。**当用户正在专注内容时，动画应当让位**。
+
+### 3. 视差与晕动症
+
+视差效果（Hero 背景慢速、文字快速）虽然好看，但对部分用户会引起眩晕：
+
+- 视差幅度别太大（背景不要超过 50% 位移）
+- 不要在长滚动页全程视差
+- 一定配合 `prefers-reduced-motion` 完全关闭
+
+### 4. 自动播放 + 视频 / 动效
+
+WCAG 要求**超过 5 秒**的自动循环动画必须能被用户暂停。装饰动效循环必须：
+
+- 提供暂停按钮，或
+- 动画停留在视口内时间 < 5 秒
+- 或在 `prefers-reduced-motion` 时禁用
+
+### 5. 屏幕阅读器与动画
+
+- `aria-live` 区域里的内容变化要伴随合理动画（让用户感知"有更新"）
+- 但动画期间不要让 DOM 闪烁或重排到读屏器无法跟上
+- SplitText 3.13 自动加 `aria-label`，旧版要手动加
+
+```tsx
+<h1 aria-label="完整原文">
+  <span aria-hidden="true">逐字 span</span>
+</h1>
+```
+
+### 6. 焦点指示器不能消失
+
+很多动画库会把 `outline` 抹掉——破坏键盘用户的焦点感知。
+
+```css
+/* ❌ 全局清除 */
+* { outline: none; }
+
+/* ✅ 保留键盘 focus */
+*:focus-visible { outline: 2px solid var(--accent); }
+```
+
+## 移动端注意
+
+### 1. 触屏没有 hover
+
+```tsx
+{/* ❌ 触屏看不到效果 */}
+<motion.button whileHover={{ scale: 1.05 }} />
+
+{/* ✅ 加 whileTap */}
+<motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} />
+```
+
+### 2. iOS Safari 100vh 抖动
+
+地址栏隐藏时 viewport 变高——`100vh` 元素跳一下。配合：
+
+```css
+.hero { height: 100svh; }   /* 用 svh 而不是 vh */
+```
+
+### 3. 触屏的 `touch-action`
+
+混用滚动和拖拽时浏览器会"抢"手势：
+
+```css
+.draggable-card { touch-action: pan-y; }  /* 上下让给滚动 */
+.swipe-x { touch-action: pan-x; }
+```
+
+### 4. ScrollSmoother 关掉触屏平滑
+
+```tsx
+ScrollSmoother.create({
+  smooth: 1.2,
+  smoothTouch: false,  // 触屏保留原生体验
+})
+```
+
+## 工程化建议
+
+### 1. 把动画当作可选模块
+
+业务核心逻辑跑通后再加动画——避免"动画 bug 影响功能上线"。
+
+### 2. 用 `MotionConfig` / `gsap.defaults` 统一配置
+
+全局 transition / ease 集中管理，避免散落各组件的硬编码值。
+
+```tsx
+<MotionConfig transition={{ duration: 0.3, ease: 'easeOut' }}>
+  <App />
+</MotionConfig>
+
+gsap.defaults({ duration: 0.5, ease: 'power2.out' })
+```
+
+### 3. 性能 budget
+
+- 首屏 JS（包括动画库）< 150 KB（gzip）
+- 单页面同时活跃的复杂动画 < 10 个
+- 单次状态切换的动画时长 < 400ms
+- 滚动驱动动画必须 60fps
+
+### 4. 测试时禁用动画
+
+CI 里跑 React Testing Library 时：
+
+```ts
+import { MotionGlobalConfig } from 'motion/react'
+MotionGlobalConfig.skipAnimations = true
+```
+
+测试只检查"功能是否对"，不等动画——快得多。
+
+## 性能与无障碍清单
+
+发布前过一遍：
+
+- [ ] 所有动画属性是 `transform` / `opacity` / `filter`？
+- [ ] 大列表是否虚拟化？
+- [ ] 频繁更新的值用 Motion Value？
+- [ ] 全局加了 `prefers-reduced-motion` CSS 后备？
+- [ ] `<MotionConfig reducedMotion="user">` 包了顶层？
+- [ ] 视差 / 长动画在 reduced motion 下完全禁用？
+- [ ] 触屏按钮加了 `whileTap`？
+- [ ] 焦点 `outline` 保留？
+- [ ] SSR 首屏关键内容不被 `initial: { opacity: 0 }` 隐藏？
+- [ ] Performance 面板录制无掉帧？
+- [ ] 包大小预算 OK？
+
+## 小结
+
+- **transform + opacity** 是动画的圣杯——其他属性能避就避
+- **Motion Value 绕过 React 渲染**——高频动画的性能基石
+- **`prefers-reduced-motion`** 必须尊重——CSS 兜底 + Motion `<MotionConfig>`
+- **首屏 JS 预算**敏感时用 LazyMotion / 动态 import
+- **触屏**别只有 hover，加 whileTap
+- **大列表**虚拟化、减少同时活跃动画数
+- 动画是"调味"——专注阅读、表单填写、视频播放时要让位

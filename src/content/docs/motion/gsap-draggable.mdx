@@ -1,0 +1,341 @@
+---
+title: Draggable + Inertia
+description: GSAP 的拖拽插件——边界、旋转、惯性甩出、与滚动协同
+---
+
+# Draggable + Inertia
+
+`Draggable` 让任意元素可拖拽，配合 `InertiaPlugin` 实现**松手后惯性甩出**（手机相册的滑动惯性、转盘旋转减速）。
+
+> 两个插件在 3.13 起免费可商用——之前 Inertia 是 Club GSAP 独享。
+
+## 与 Motion `drag` 的差异
+
+| 维度 | Motion `drag` | GSAP Draggable |
+| ---- | ------------- | -------------- |
+| 拖拽方向 | `x` / `y` / 两者 | `x` / `y` / `xy` / `rotation` / `scrollLeft` 等 |
+| 旋转拖拽 | ❌ | ⭐ `type: 'rotation'` |
+| 滚动模拟 | ❌ | ⭐ `type: 'scroll'` |
+| 边界 | 矩形 / ref | 矩形 / 选择器 / 函数 |
+| 惯性 | 内置 | 需要 InertiaPlugin |
+| 与 React 集成 | ⭐ 一行 prop | 需要 useGSAP + ref |
+| 列表排序 | ⭐ `<Reorder>` | 需要手写 |
+
+**Motion 更适合 React 业务**——除非需要旋转拖拽 / 滚动模拟，否则继续用 Motion。
+
+GSAP Draggable 的强项是**精细控制**和**配合其他 GSAP 插件**（比如 ScrollTrigger 的 pin、惯性的物理曲线）。
+
+## 安装
+
+```tsx
+import gsap from 'gsap'
+import { Draggable } from 'gsap/Draggable'
+import { InertiaPlugin } from 'gsap/InertiaPlugin'
+
+gsap.registerPlugin(Draggable, InertiaPlugin)
+```
+
+## 第一个示例
+
+```tsx filename="components/DragBox.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { Draggable } from 'gsap/Draggable'
+import { useRef } from 'react'
+
+gsap.registerPlugin(Draggable)
+
+export function DragBox() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      Draggable.create('.box', {
+        type: 'x, y',
+        bounds: container.current,
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container} className="relative w-96 h-64 border">
+      <div className="box absolute size-16 bg-blue-500 rounded" />
+    </div>
+  )
+}
+```
+
+`.box` 可以在容器内自由拖动。
+
+## type 选项
+
+```tsx
+Draggable.create('.box', { type: 'x' })          // 仅水平
+Draggable.create('.box', { type: 'y' })          // 仅垂直
+Draggable.create('.box', { type: 'x, y' })       // 两者
+Draggable.create('.box', { type: 'rotation' })   // 旋转
+Draggable.create('.box', { type: 'scrollLeft' }) // 模拟水平滚动
+Draggable.create('.box', { type: 'scrollTop' })  // 模拟垂直滚动
+```
+
+### type: 'rotation' 旋转拖拽
+
+```tsx
+Draggable.create('.dial', {
+  type: 'rotation',
+  inertia: true,
+})
+```
+
+效果：表盘 / 转盘 / 拨号——按住元素一旋转就跟着转，松手有惯性。Motion 做不了这个。
+
+### type: 'scrollLeft' 滚动模拟
+
+```tsx
+Draggable.create('.scroll-container', {
+  type: 'scrollLeft',
+  edgeResistance: 0.65,
+})
+```
+
+把溢出滚动的容器变成"拖拽滚动"——触屏体验 + 桌面也能用。
+
+## bounds 边界
+
+```tsx
+// 选择器
+bounds: '#container'
+
+// 元素引用
+bounds: containerRef.current
+
+// 矩形对象
+bounds: { left: 0, top: 0, width: 500, height: 300 }
+
+// 旋转的角度边界
+bounds: { minRotation: -45, maxRotation: 45 }
+```
+
+bounds 同时配合 `edgeResistance`（拖到边界外的阻力，0~1）：
+
+```tsx
+Draggable.create('.box', {
+  bounds: '#area',
+  edgeResistance: 0.65,  // 拖出边界时有阻力
+})
+```
+
+## 拖拽时回调
+
+```tsx
+Draggable.create('.box', {
+  onPress: function () { console.log('按下', this.x, this.y) },
+  onDragStart: function () {},
+  onDrag: function () { console.log('拖动中', this.x, this.y) },
+  onDragEnd: function () { console.log('松开') },
+  onRelease: function () {},
+  onClick: function () { console.log('点击（无拖动）') },
+})
+```
+
+`this` 指向 Draggable 实例——可以读 `x` / `y` / `rotation` / `target` 等。
+
+## 命中检测
+
+```tsx
+Draggable.create('.card', {
+  onDragEnd: function () {
+    const dropTarget = document.querySelector('#dropZone')
+    if (Draggable.hitTest(this.target, dropTarget, '50%')) {
+      console.log('被拖进 drop zone 了')
+    }
+  },
+})
+```
+
+`Draggable.hitTest(elementA, elementB, overlap)` 检测两元素是否重叠——`'50%'` 表示重叠面积超过 50% 才算 hit。
+
+## InertiaPlugin：惯性
+
+`inertia: true` 让松手后**继续滑行**直到自然停下：
+
+```tsx
+Draggable.create('.box', {
+  type: 'x, y',
+  inertia: true,
+})
+```
+
+### 细化惯性
+
+```tsx
+Draggable.create('.box', {
+  type: 'x, y',
+  inertia: true,
+  throwResistance: 1000,    // 滑行阻力（越小滑得越远）
+  maxDuration: 2,           // 最长滑行时间
+  minDuration: 0.3,
+})
+```
+
+### snap 吸附
+
+松手后自动吸附到目标位置：
+
+```tsx
+Draggable.create('.box', {
+  type: 'x, y',
+  inertia: true,
+  snap: {
+    x: function (x) { return Math.round(x / 50) * 50 },  // 吸附到 50px 网格
+    y: function (y) { return Math.round(y / 50) * 50 },
+  },
+})
+```
+
+或者吸附到一组离散点：
+
+```tsx
+snap: {
+  x: [0, 100, 200, 300],
+  y: [0, 100],
+}
+```
+
+## 实战示例
+
+### 拨号转盘
+
+```tsx filename="components/Dial.tsx"
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { Draggable } from 'gsap/Draggable'
+import { InertiaPlugin } from 'gsap/InertiaPlugin'
+import { useRef } from 'react'
+
+gsap.registerPlugin(Draggable, InertiaPlugin)
+
+export function Dial() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      Draggable.create('.dial', {
+        type: 'rotation',
+        inertia: true,
+        snap: { rotation: (value) => Math.round(value / 30) * 30 },  // 30 度吸附
+      })
+    },
+    { scope: container }
+  )
+
+  return (
+    <div ref={container} className="flex items-center justify-center h-96">
+      <div className="dial size-40 rounded-full bg-gray-200 relative">
+        <div className="absolute top-2 left-1/2 size-3 bg-red-500 -translate-x-1/2" />
+      </div>
+    </div>
+  )
+}
+```
+
+旋转转盘，松手按 30° 吸附——音量旋钮、时钟设置都能用。
+
+### 拖拽排序（手写版）
+
+GSAP 没有像 Motion `<Reorder>` 那样的现成组件，要自己结合 Flip 实现：
+
+```tsx
+Draggable.create('.item', {
+  type: 'y',
+  onDrag: function () {
+    // 检测当前拖到哪个位置
+    const others = document.querySelectorAll('.item:not(.dragging)')
+    others.forEach((other, i) => {
+      if (Draggable.hitTest(this.target, other, '50%')) {
+        // 交换 DOM 位置（用 Flip 动画过渡其他项）
+      }
+    })
+  },
+})
+```
+
+实际工程里**这种需求请直接用 [Motion `<Reorder>`](/motion/motion-drag)** 或 dnd-kit。GSAP Draggable 不擅长列表排序。
+
+### 滑动开关
+
+```tsx
+Draggable.create('.handle', {
+  type: 'x',
+  bounds: '.track',
+  inertia: true,
+  onDragEnd: function () {
+    const isOn = this.x > 30
+    gsap.to(this.target, { x: isOn ? 60 : 0, duration: 0.2 })
+  },
+})
+```
+
+## 与 ScrollTrigger 协同
+
+Draggable 内部用了独占的指针事件——和 ScrollTrigger 不会打架。但**被拖元素如果在 ScrollSmoother 内**，需要：
+
+```tsx
+ScrollSmoother.get()?.paused(true)   // 拖拽时暂停平滑滚动
+// 拖完
+ScrollSmoother.get()?.paused(false)
+```
+
+否则页面会一边滚一边拖，体验混乱。
+
+## 陷阱
+
+### 触屏的滚动冲突
+
+水平 Draggable 在垂直滚动列表里——触屏会把上下手势识别为滚动。需要 CSS：
+
+```css
+.box { touch-action: pan-y; }   /* 让上下手势归滚动，左右归 Draggable */
+```
+
+或 `pan-x` 反过来。
+
+### React 卸载未清理
+
+`useGSAP` 会 revert 大部分动画，但 Draggable 实例**有时不会被自动清理**——保险起见手动 kill：
+
+```tsx
+useGSAP(() => {
+  const draggables = Draggable.create('.box', { /* ... */ })
+  return () => draggables.forEach(d => d.kill())
+}, { scope: container })
+```
+
+### `bounds` 用 ref 时机
+
+```tsx
+useGSAP(() => {
+  Draggable.create('.box', { bounds: container.current })
+  // container.current 此时一定存在——useGSAP 在 mount 后跑
+}, { scope: container })
+```
+
+直接用 ref 没问题。但如果 bounds 是异步加载的元素，需要等它出现后再创建 Draggable。
+
+### `type: 'rotation'` 的中心
+
+旋转的中心点由 CSS `transform-origin` 决定——默认是元素中心，要旋转其他点设：
+
+```css
+.dial { transform-origin: 0 0; }
+```
+
+## 小结
+
+- Draggable 让任意元素可拖——支持 x / y / xy / rotation / scroll 多种 type
+- InertiaPlugin 加惯性甩出，配 `snap` 实现吸附
+- `Draggable.hitTest` 做命中检测，实现"拖到目标区"模式
+- React 项目优先用 Motion `drag`——除非需要旋转拖拽
+- 触屏注意 `touch-action` 避免手势冲突
+- 与 ScrollSmoother 配合时记得 `paused()` 防互扰

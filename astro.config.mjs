@@ -48,6 +48,11 @@ export default defineConfig({
 					items: [{ autogenerate: { directory: 'react' } }]
 				},
 				{
+					label: '动画 (Motion & GSAP)',
+					collapsed: true,
+					items: [{ autogenerate: { directory: 'motion' } }]
+				},
+				{
 					label: 'Vue',
 					collapsed: true,
 					items: [{ autogenerate: { directory: 'vue' } }]

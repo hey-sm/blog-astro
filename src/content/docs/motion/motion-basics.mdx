@@ -1,0 +1,279 @@
+---
+title: 你的第一个 Motion 动画
+description: initial / animate / exit / transition 四件套，从一个淡入开始
+---
+
+# 你的第一个 Motion 动画
+
+Motion 的全部入门可以浓缩成三个 prop：
+
+| Prop | 含义 |
+| ---- | ---- |
+| `initial` | 组件挂载时的"起点状态" |
+| `animate` | 组件挂载完成后的"目标状态"，状态变化也走它 |
+| `exit` | 组件卸载前的"离场状态"（需要 `<AnimatePresence>` 包裹） |
+
+再加一个：
+
+| Prop | 含义 |
+| ---- | ---- |
+| `transition` | 控制"怎么动"——时长、缓动、spring 参数 |
+
+只要理解这四个 prop，你已经能做大部分业务动画。
+
+## 第一个动画：淡入
+
+```tsx filename="components/FadeIn.tsx"
+import { motion } from 'motion/react'
+
+export function FadeIn() {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+    >
+      Hello Motion
+    </motion.div>
+  )
+}
+```
+
+发生了什么：
+
+1. 组件挂载，DOM 上 `opacity: 0`（来自 `initial`）
+2. Motion 立即启动一个 0.4 秒的过渡，从 `0` 到 `1`
+3. 过渡结束，停在 `opacity: 1`
+
+`motion.div` 是 `<div>` 的"可动画"版本。Motion 给所有 HTML / SVG 标签都做了一份——`motion.button`、`motion.section`、`motion.svg`、`motion.path` 等。**用法跟普通标签完全一样**，只是多了上面那几个 prop。
+
+## 多属性同时动画
+
+`initial` 和 `animate` 是普通对象，写多少属性都行：
+
+```tsx
+<motion.div
+  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+  animate={{ opacity: 1, y: 0, scale: 1 }}
+  transition={{ duration: 0.4 }}
+>
+  Card
+</motion.div>
+```
+
+注意几个简写：
+
+| 简写 | 等价 CSS |
+| ---- | -------- |
+| `x: 100` | `transform: translateX(100px)` |
+| `y: 20` | `transform: translateY(20px)` |
+| `scale: 1.2` | `transform: scale(1.2)` |
+| `rotate: 45` | `transform: rotate(45deg)` |
+| `rotateX: 30` | `transform: rotateX(30deg)` |
+
+Motion 会把这些 prop 自动合成一个 `transform`——你不用手写 `transform: translateY(20px) scale(0.95)`。
+
+## 状态驱动：让 animate 成为变量
+
+`animate` 不一定是字面量，可以是变量：
+
+```tsx filename="components/Toggle.tsx"
+import { motion } from 'motion/react'
+import { useState } from 'react'
+
+export function Toggle() {
+  const [open, setOpen] = useState(false)
+  return (
+    <motion.button
+      animate={{
+        backgroundColor: open ? '#22c55e' : '#ef4444',
+        rotate: open ? 180 : 0,
+      }}
+      onClick={() => setOpen(o => !o)}
+    >
+      {open ? '开' : '关'}
+    </motion.button>
+  )
+}
+```
+
+每次 `open` 变化，React 重新渲染，Motion 检测到 `animate` 对象的属性变了，自动从当前值过渡到新值。**你不需要手动写过渡逻辑**——这是 Motion 比纯 CSS `transition` 更省心的地方。
+
+## transition 控制"怎么动"
+
+不写 `transition` 时，Motion 有两套默认值：
+
+- **物理属性**（`x` / `y` / `scale` / `rotate` 等）默认用 spring（弹簧）
+- **视觉属性**（`opacity` / `backgroundColor` / `color` 等）默认用 tween（线性补间）
+
+这是 Motion 11 引入的"混合默认值"。如果你希望统一行为，显式写 `transition`：
+
+```tsx
+<motion.div
+  animate={{ x: 100 }}
+  transition={{ type: 'tween', duration: 0.4, ease: 'easeOut' }}
+/>
+```
+
+```tsx
+<motion.div
+  animate={{ opacity: 1 }}
+  transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+/>
+```
+
+详细参数留到 [Transition 详解](/motion/motion-transition)。这里只需要记住：**默认值常常已经够用，需要精细控制时再写 `transition`**。
+
+## 为单个属性指定不同 transition
+
+不同属性想用不同时长？把 transition 嵌套到属性名下：
+
+```tsx
+<motion.div
+  animate={{ opacity: 1, x: 100 }}
+  transition={{
+    duration: 0.4,         // 默认
+    x: { duration: 1.2 },  // x 单独 1.2 秒
+  }}
+/>
+```
+
+这种写法对于"内容快速淡入但容器慢速滑入"的场景很有用。
+
+## delay：起步等一下
+
+```tsx
+<motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  transition={{ duration: 0.3, delay: 0.2 }}
+/>
+```
+
+要给一组元素做"错峰入场"，最简单的办法是给每个元素不同 `delay`。但更优雅的方案是 [Variants 编排](/motion/motion-variants) 的 `staggerChildren`——后面会讲。
+
+## 监听动画结束
+
+```tsx
+<motion.div
+  animate={{ x: 100 }}
+  onAnimationStart={() => console.log('开始')}
+  onAnimationComplete={() => console.log('结束')}
+/>
+```
+
+这两个回调对"动画结束后再做点什么"很有用——比如关闭 Modal 后聚焦到下一个元素。
+
+## 完整示例：可点击的卡片
+
+```tsx filename="components/Card.tsx"
+import { motion } from 'motion/react'
+import { useState } from 'react'
+
+export function Card() {
+  const [active, setActive] = useState(false)
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 20 }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        scale: active ? 1.05 : 1,
+        boxShadow: active
+          ? '0 12px 32px rgba(0,0,0,0.18)'
+          : '0 2px 8px rgba(0,0,0,0.08)',
+      }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      onClick={() => setActive(a => !a)}
+      className="cursor-pointer p-6 rounded-2xl bg-white"
+    >
+      <h3>点我试试</h3>
+      <p>状态：{active ? '激活' : '默认'}</p>
+    </motion.article>
+  )
+}
+```
+
+这一段囊括了：
+
+- 入场动画（`initial` → `animate`）
+- 状态驱动的属性切换（`active` 变量）
+- `transition` 自定义缓动
+- 与 React state 的交互
+
+## 常见陷阱
+
+### initial 不会"对齐"已有的 CSS
+
+`initial={{ opacity: 0 }}` 直接把元素的初始 opacity 强制设为 0，**忽略 CSS 中的 `opacity` 值**。如果你写了：
+
+```css
+.card { opacity: 0.8; }
+```
+
+```tsx
+<motion.div className="card" animate={{ opacity: 1 }} />
+```
+
+挂载时元素会从 `0.8` → `1`（因为没写 `initial`，Motion 把当前 DOM 值当起点）。
+
+如果**不需要入场动画**，把 `initial` 设为 `false`：
+
+```tsx
+<motion.div initial={false} animate={{ opacity: open ? 1 : 0 }} />
+```
+
+`initial={false}` 等于"挂载时直接落到 `animate` 状态，不播放任何动画"——常用于受控开关。
+
+### exit 必须配合 AnimatePresence
+
+```tsx
+{/* 不会播放 exit！ */}
+{open && <motion.div exit={{ opacity: 0 }} />}
+```
+
+退场动画的原理是"组件已经从 React 树移除了，但 Motion 让它在 DOM 留一会儿播完动画再移除"。这需要 `<AnimatePresence>`：
+
+```tsx
+import { AnimatePresence, motion } from 'motion/react'
+
+<AnimatePresence>
+  {open && (
+    <motion.div
+      key="box"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    />
+  )}
+</AnimatePresence>
+```
+
+详见 [进出场动画](/motion/motion-presence)。
+
+### 动 width / height 会卡
+
+```tsx
+{/* 慎用 */}
+<motion.div animate={{ width: 200, height: 100 }} />
+```
+
+`width` / `height` 会触发 layout，每帧都要重排，大量元素同时动会掉帧。**优先用 `scale`**——只触发 composite，GPU 加速：
+
+```tsx
+<motion.div animate={{ scale: open ? 1 : 0.5 }} />
+```
+
+如果确实需要动尺寸，看 [布局动画](/motion/motion-layout) 的 `layout` prop——Motion 会用 transform "伪装"成尺寸变化。
+
+## 小结
+
+- `initial` / `animate` / `exit` / `transition` 是 Motion 入门四件套
+- `motion.*` 标签接受所有原生 prop，外加上面四个
+- `x` / `y` / `scale` / `rotate` 等是 transform 的简写
+- 物理属性默认 spring，视觉属性默认 tween；不满意就显式写 `transition`
+- `initial={false}` 跳过入场动画
+- `exit` 必须配合 `<AnimatePresence>`
+- 优先动 `transform` / `opacity`，避开 `width` / `height`
+
+下一章 [Transition 详解](/motion/motion-transition) 会把 `transition` 的所有参数讲清楚。

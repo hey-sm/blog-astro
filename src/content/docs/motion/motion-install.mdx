@@ -1,0 +1,197 @@
+---
+title: 安装与接入
+description: 在 Vite、Next.js、Astro 三种主流环境下安装 Motion for React，并跑通第一个动画
+---
+
+# 安装与接入
+
+Motion for React 是一个普通的 npm 包，对运行环境没有特殊要求。但**导入路径**和**何时引入** "use client" 在不同框架下不一样，本章把三种主流环境讲清楚。
+
+## 包名说明
+
+| 包名 | 状态 | 说明 |
+| ---- | ---- | ---- |
+| `motion` | ✅ 推荐 | 当前官方包，覆盖 React / JS / Vue |
+| `framer-motion` | ⚠️ 兼容 | 旧包名，仍能用但不再加新功能 |
+
+> 已有项目用 `framer-motion` 不必急于迁移——API 完全兼容。新项目一律用 `motion`。
+
+## Vite + React
+
+最简单的场景。
+
+```bash
+pnpm add motion
+```
+
+```tsx filename="src/App.tsx"
+import { motion } from 'motion/react'
+
+export default function App() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      style={{ padding: 40, fontSize: 24 }}
+    >
+      Hello Motion
+    </motion.div>
+  )
+}
+```
+
+`pnpm dev` 打开浏览器即可看到淡入上滑。
+
+## Next.js（App Router）
+
+App Router 默认是 Server Component，Motion 必须在 Client Component 里使用——动画依赖浏览器 API，服务端无法运行。
+
+```bash
+pnpm add motion
+```
+
+```tsx filename="app/components/FadeIn.tsx"
+'use client'
+
+import { motion } from 'motion/react'
+import type { ReactNode } from 'react'
+
+export function FadeIn({ children }: { children: ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+```
+
+```tsx filename="app/page.tsx"
+import { FadeIn } from './components/FadeIn'
+
+export default function Page() {
+  return (
+    <FadeIn>
+      <h1>Hello</h1>
+    </FadeIn>
+  )
+}
+```
+
+页面（Server Component）保持服务端渲染，只把动画封装到客户端组件里。
+
+### 陷阱：忘记 `'use client'`
+
+错误信息往往是：
+
+```
+Error: useState is not a function
+```
+
+或者：
+
+```
+Error: hydration mismatch
+```
+
+Motion 内部用 `useState` / `useEffect`，这些是 Client Hook。在 Server Component 直接用 `motion.div` 会立刻报错。
+
+### 何时不需要 `'use client'`
+
+如果父组件已经是 Client Component（顶部有 `'use client'`），子组件里继续用 `motion.div` 不需要再加。`'use client'` 标记的是**模块边界**，不是组件本身。
+
+## Astro
+
+Astro 默认是静态生成，组件在构建时跑一次。要让 Motion 真正"动"起来，必须用 **Astro 的 Client Directive** 加载 React 组件。
+
+```bash
+pnpm add motion
+pnpm astro add react
+```
+
+`astro add react` 会自动配置 `@astrojs/react` 集成。
+
+```tsx filename="src/components/FadeIn.tsx"
+import { motion } from 'motion/react'
+import type { ReactNode } from 'react'
+
+export function FadeIn({ children }: { children: ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+```
+
+```astro filename="src/pages/index.astro"
+---
+import { FadeIn } from '../components/FadeIn'
+---
+
+<html>
+  <body>
+    <FadeIn client:load>
+      <h1>Hello</h1>
+    </FadeIn>
+  </body>
+</html>
+```
+
+| Directive | 何时加载 | 适用 |
+| --------- | -------- | ---- |
+| `client:load` | 页面加载立即水合 | 首屏关键动画 |
+| `client:visible` | 元素进入视口才水合 | 滚动到才看见的动画，性能最好 |
+| `client:idle` | 浏览器空闲时水合 | 非关键动画 |
+| `client:only="react"` | 跳过服务端渲染，纯客户端 | 强依赖浏览器 API 的组件 |
+
+> 滚动驱动动画建议 `client:visible`，避免页面顶部的 Motion 占用首屏 JS 预算。
+
+## TypeScript 配置
+
+无需额外配置。`motion/react` 自带类型，`motion.div` / `motion.button` 等组件继承对应 HTML 元素的全部 props，并扩展 Motion 自己的 prop。
+
+```tsx
+import { motion, type HTMLMotionProps } from 'motion/react'
+
+type ButtonProps = HTMLMotionProps<'button'> & {
+  variant?: 'primary' | 'ghost'
+}
+
+function Button({ variant, ...rest }: ButtonProps) {
+  return <motion.button {...rest} />
+}
+```
+
+`HTMLMotionProps<'button'>` 等价于"button 的所有 prop + Motion 的动画 prop"。
+
+## 减包优化（先记一句）
+
+默认导入 `motion/react` 会带上完整 feature pack，约 40 KB（gzipped）。如果项目对包大小敏感，可以改用 `<LazyMotion>` 把 feature 拆成可选——具体在 [进阶能力](/motion/motion-advanced) 章详述，先记住有这个手段。
+
+## 安装验证清单
+
+跑通第一个动画前，确认：
+
+- [ ] `node_modules/motion` 存在
+- [ ] 导入路径是 `motion/react`，不是 `motion`（后者是 JS 版本）
+- [ ] Next.js / Astro 加了客户端边界（`'use client'` / `client:*`）
+- [ ] 浏览器无 hydration 警告
+
+## 小结
+
+- 新项目装 `motion`，从 `motion/react` 导入
+- Next.js App Router 用 `'use client'` 标记客户端组件
+- Astro 用 `client:visible` 等 Directive 触发水合
+- TypeScript 开箱即用，`HTMLMotionProps<'tag'>` 用来包二次封装组件
+- 默认 ~40 KB，对包敏感的场景预留 `<LazyMotion>` 优化路径
+
+下一章 [你的第一个动画](/motion/motion-basics) 把 `initial` / `animate` / `exit` / `transition` 四件套讲透。

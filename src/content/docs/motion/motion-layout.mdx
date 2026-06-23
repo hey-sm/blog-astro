@@ -1,0 +1,321 @@
+---
+title: 布局动画
+description: Motion 的 layout prop、layoutId 共享元素、LayoutGroup 与 FLIP 原理
+---
+
+# 布局动画
+
+布局动画是 Motion 最具杀手锏的能力——元素在 DOM 结构、尺寸、位置发生变化时，**自动**用平滑过渡补齐两个状态之间的差距。手写一个能优雅处理列表排序、抽屉展开、共享元素跳转的动画极其麻烦；Motion 用一行 `layout` prop 解决全部场景。
+
+## FLIP 原理
+
+布局动画的标准做法叫 **FLIP**——First / Last / Invert / Play：
+
+1. **First**：记录元素动画前的位置和尺寸（`getBoundingClientRect()`）
+2. **Last**：让 DOM 改变（添加 / 删除 / 排序），记录新位置
+3. **Invert**：用 `transform` 把元素**临时**移回旧位置——视觉上看起来没动
+4. **Play**：反向播放 transform 动画到 0，元素丝滑地"落"到新位置
+
+为什么不直接动画 `top` / `left` / `width` / `height`？因为这些属性触发 layout / paint，每帧都会重排，60fps 下卡顿明显。`transform` 由 GPU 合成层处理，几乎不消耗主线程。
+
+Motion 的 `layout` prop 把 FLIP 算法封装成声明式 API——你只关心结构变化，差值自动算。
+
+## 基础：`layout` prop
+
+任何 `motion.*` 元素加上 `layout` 即可：
+
+```tsx filename="ListItem.tsx"
+import { motion } from 'motion/react'
+
+function ListItem({ text }: { text: string }) {
+  return (
+    <motion.li layout>
+      {text}
+    </motion.li>
+  )
+}
+```
+
+当父容器结构变化（增删项目、排序、padding 改变），所有 `layout` 元素自动滑到新位置。
+
+### 列表排序
+
+```tsx filename="SortableList.tsx"
+import { useState } from 'react'
+import { motion } from 'motion/react'
+
+const initial = [
+  { id: 1, text: '苹果' },
+  { id: 2, text: '香蕉' },
+  { id: 3, text: '橙子' },
+]
+
+export function SortableList() {
+  const [items, setItems] = useState(initial)
+
+  const shuffle = () =>
+    setItems(prev => [...prev].sort(() => Math.random() - 0.5))
+
+  return (
+    <>
+      <button onClick={shuffle}>随机排序</button>
+      <ul>
+        {items.map(item => (
+          <motion.li
+            key={item.id}
+            layout
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            {item.text}
+          </motion.li>
+        ))}
+      </ul>
+    </>
+  )
+}
+```
+
+`key` 必须稳定——靠 `key` 识别"这个元素移到了新位置"，而不是"旧元素被卸载、新元素被挂载"。**用数组下标当 key 会让 layout 失效**。
+
+### 增删项目（结合 AnimatePresence）
+
+```tsx filename="TodoList.tsx"
+import { motion, AnimatePresence } from 'motion/react'
+
+export function TodoList({ todos, onRemove }: Props) {
+  return (
+    <ul>
+      <AnimatePresence mode="popLayout">
+        {todos.map(todo => (
+          <motion.li
+            key={todo.id}
+            layout
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+          >
+            {todo.text}
+            <button onClick={() => onRemove(todo.id)}>×</button>
+          </motion.li>
+        ))}
+      </AnimatePresence>
+    </ul>
+  )
+}
+```
+
+`mode="popLayout"` 让退场元素脱离文档流，避免它被未消失的兄弟元素挤压导致的"奇怪移动"。
+
+## `layout` 的可选值
+
+```tsx
+<motion.div layout />              {/* 位置 + 尺寸都动画 */}
+<motion.div layout="position" />   {/* 只动画位置，尺寸瞬间变化 */}
+<motion.div layout="size" />       {/* 只动画尺寸，位置瞬间变化 */}
+<motion.div layout="preserve-aspect" /> {/* 保持长宽比 */}
+```
+
+业务里 90% 用默认 `layout`。
+
+### 何时只 `layout="position"`
+
+尺寸频繁变化但你只想动画位置——比如**带文字的项目**，文字长度不同导致尺寸跳跃，强行 `layout` 会拉伸内部文字，看起来像"橡皮筋"。这时只动画位置：
+
+```tsx
+<motion.li layout="position">
+  {longOrShortText}
+</motion.li>
+```
+
+## `layoutId` 共享元素
+
+不同 DOM 节点用同一个 `layoutId`，Motion 会在它们之间播放过渡——一个挂载、一个卸载时，旧元素会"飞"到新元素的位置。
+
+```tsx filename="Gallery.tsx"
+import { useState } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
+
+export function Gallery({ items }: Props) {
+  const [selected, setSelected] = useState<Item | null>(null)
+
+  return (
+    <>
+      <ul className="grid grid-cols-3 gap-4">
+        {items.map(item => (
+          <motion.li
+            key={item.id}
+            layoutId={`card-${item.id}`}
+            onClick={() => setSelected(item)}
+          >
+            <img src={item.thumb} alt={item.title} />
+            <h3>{item.title}</h3>
+          </motion.li>
+        ))}
+      </ul>
+
+      <AnimatePresence>
+        {selected && (
+          <motion.div
+            className="modal"
+            layoutId={`card-${selected.id}`}
+            onClick={() => setSelected(null)}
+          >
+            <img src={selected.fullSize} alt={selected.title} />
+            <h2>{selected.title}</h2>
+            <p>{selected.description}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+```
+
+点击列表项时，缩略图位置变成详情位置；关闭时反向。这种"缩略图飞到全屏"的效果不写一行动画代码。
+
+### 共享元素的注意点
+
+- **同时只能有一对**：两个相同 `layoutId` 的元素同时显示时，行为未定义。一个挂载、一个卸载是正常用法
+- **transition 在新元素上配置**：因为它是"目标位置"
+- **内部内容不会变形**：图片只动画外框，内部用 `motion.img` 也加 `layoutId` 才能让图片本身平滑过渡
+
+## 嵌套布局动画
+
+外层容器和内部元素都加 `layout`，Motion 自动处理嵌套：
+
+```tsx
+<motion.div layout className="card">
+  <motion.h3 layout>{title}</motion.h3>
+  <motion.p layout>{description}</motion.p>
+  {expanded && (
+    <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      {extraContent}
+    </motion.div>
+  )}
+</motion.div>
+```
+
+外框展开时，标题和描述自动滑到新位置，避免"瞬间弹"的视觉跳跃。
+
+## `<LayoutGroup>` 同步动画
+
+不同组件树之间的元素需要同步布局动画时，用 `<LayoutGroup>` 包起来：
+
+```tsx filename="Tabs.tsx"
+import { LayoutGroup, motion } from 'motion/react'
+import { useState } from 'react'
+
+export function Tabs({ tabs }: Props) {
+  const [active, setActive] = useState(tabs[0].id)
+
+  return (
+    <LayoutGroup>
+      <ul className="tabs">
+        {tabs.map(tab => (
+          <li key={tab.id} onClick={() => setActive(tab.id)}>
+            {tab.label}
+            {active === tab.id && (
+              <motion.div
+                layoutId="underline"
+                className="underline"
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+    </LayoutGroup>
+  )
+}
+```
+
+下划线在不同 tab 之间平滑滑动——同一个 `layoutId="underline"` 元素在 DOM 中"换位置"。
+
+## 自定义过渡
+
+```tsx
+<motion.div
+  layout
+  transition={{
+    layout: { duration: 0.4, ease: 'easeOut' }
+  }}
+/>
+```
+
+把 `layout` 单独配置，避免影响其他属性。或者用全局 spring：
+
+```tsx
+<motion.div
+  layout
+  transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+/>
+```
+
+## 陷阱
+
+### 陷阱 1：transform 与 layout 冲突
+
+如果父级有 `transform`（比如缩放、翻转），Motion 测量出的位置是**变换后**的视觉位置，可能错位。
+
+修复：让 `transform` 只作用于内层，外层负责 layout：
+
+```tsx
+<motion.div layout>
+  <motion.div animate={{ scale: 1.1 }}>...</motion.div>
+</motion.div>
+```
+
+### 陷阱 2：CSS Grid / Flex 间隙变化
+
+Grid 模板列改变时，元素位置变了但浏览器没触发 reflow——Motion 拿到的旧值是错的。
+
+修复：确保布局变化由 React 状态驱动，让 React 渲染完再让 Motion 测量。一般情况下没问题，复杂场景考虑用 `layoutDependency`：
+
+```tsx
+<motion.div layout layoutDependency={columns} />
+```
+
+`columns` 变化时强制重新测量。
+
+### 陷阱 3：图片闪烁
+
+`<img>` 没加载完时尺寸是 0，加载完成后 layout 突然变化导致跳动。
+
+修复：给图片显式 `width` / `height` 占位，或包一层 `motion.div` 固定尺寸：
+
+```tsx
+<motion.div layout style={{ width: 200, height: 150 }}>
+  <img src={url} />
+</motion.div>
+```
+
+### 陷阱 4：`overflow: hidden` 导致裁切
+
+布局动画期间元素可能临时超出父容器，被 `overflow: hidden` 裁切露馅。考虑动画期间临时放开：
+
+```tsx
+<motion.div
+  layout
+  style={{ overflow: 'hidden' }}
+  transition={{ layout: { duration: 0.3 } }}
+/>
+```
+
+或者把 overflow 容器外移。
+
+## 性能
+
+- **大列表（100+ 项）慎用**：每帧都要测量 DOM，CPU 成本高
+- **优先 `layout="position"`**：只动画 transform 的 X/Y，比同时动画 scale 便宜
+- **关闭不必要的 layout**：列表项内部的小元素一般不需要 `layout`，让外层动就够了
+
+## 与原生 View Transitions 的对比
+
+Chrome 已支持 [View Transitions API](https://developer.mozilla.org/zh-CN/docs/Web/API/View_Transitions_API)——浏览器原生的 FLIP。但兼容性、控制粒度、与 React 集成都不如 Motion。Motion 团队也在跟进原生 API 作为后备引擎。
+
+## 小结
+
+- `layout` prop = FLIP 算法的声明式封装，元素自动平滑过渡到新位置
+- `layoutId` 实现共享元素动画，列表项 → 详情页"飞过去"
+- `<LayoutGroup>` 同步不同组件树之间的 layout
+- 必须用稳定的 `key`，否则被识别为"卸载 + 挂载"
+- 大列表谨慎使用，配合 `mode="popLayout"` 解决退场挤压问题

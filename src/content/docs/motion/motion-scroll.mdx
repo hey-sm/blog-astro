@@ -1,0 +1,357 @@
+---
+title: 滚动驱动动画
+description: useScroll 与 whileInView——视差、进度条、滚动入场
+---
+
+# 滚动驱动动画
+
+滚动是 Web 上最丰富的"输入源"之一——视差、进度条、章节切换、SVG 路径绘制……Motion 把它抽象成几个简单的 Hook。
+
+## 两种滚动动画模式
+
+| 模式 | 触发 | API | 用途 |
+| ---- | ---- | ---- | ---- |
+| **入场触发** | 元素进入视口时播一次 | `whileInView` | 滚到才显示的卡片 |
+| **滚动跟随** | 动画进度跟随滚动条位置 | `useScroll` | 视差、进度条、章节切换 |
+
+## whileInView 入场触发
+
+最常用。已在 [手势交互](/motion/motion-gestures) 提过，这里补全细节。
+
+```tsx
+<motion.div
+  initial={{ opacity: 0, y: 30 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  viewport={{ once: true, amount: 0.3, margin: '-80px' }}
+>
+  滚到这里时淡入
+</motion.div>
+```
+
+`viewport` 配置：
+
+| 字段 | 类型 | 说明 |
+| ---- | ---- | ---- |
+| `once` | `boolean` | 是否只触发一次（推荐 `true`） |
+| `amount` | `'some' \| 'all' \| 0..1` | 多少比例可见时触发 |
+| `margin` | `string` | CSS margin 写法，扩大或收缩判定区 |
+| `root` | `RefObject` | 自定义滚动容器（默认是浏览器视口） |
+
+### `amount` 的三档
+
+- `'some'`（默认）：任意 1 像素可见就触发
+- `'all'`：元素完全进入视口才触发
+- 数字 `0..1`：可见比例达到阈值才触发
+
+> 大块内容（整屏 hero）用 `amount: 0.3` 比较自然——不会还没看到一半就触发。
+
+### `margin` 提前 / 延后触发
+
+```tsx
+viewport={{ margin: '-100px' }}  // 视口顶部上推 100px 后才算"进入"
+viewport={{ margin: '0px 0px -200px 0px' }}  // 底部边界上推 200px
+```
+
+CSS margin 顺序：top right bottom left。负值收缩，正值扩大。
+
+## useScroll：跟随滚动
+
+```tsx
+import { useScroll } from 'motion/react'
+
+function ProgressBar() {
+  const { scrollYProgress } = useScroll()
+  return (
+    <motion.div
+      style={{ scaleX: scrollYProgress, transformOrigin: 'left' }}
+      className="fixed top-0 left-0 right-0 h-1 bg-blue-500"
+    />
+  )
+}
+```
+
+`useScroll()` 返回四个 motion value：
+
+| 值 | 类型 | 范围 | 含义 |
+| -- | ---- | ---- | ---- |
+| `scrollX` | px | 0 ~ maxScroll | 水平滚动距离 |
+| `scrollY` | px | 0 ~ maxScroll | 垂直滚动距离 |
+| `scrollXProgress` | 0 ~ 1 | 水平滚动进度 |
+| `scrollYProgress` | 0 ~ 1 | 垂直滚动进度 |
+
+它们都是 [Motion Value](/motion/motion-values)——绑给 `style` 不触发渲染。
+
+## 监听特定容器
+
+默认监听浏览器视口。`target` 参数让 `useScroll` 监听**某个元素相对视口的位置**：
+
+```tsx filename="components/SectionParallax.tsx"
+import { motion, useScroll, useTransform } from 'motion/react'
+import { useRef } from 'react'
+
+export function SectionParallax() {
+  const ref = useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start end', 'end start'],
+  })
+
+  const y = useTransform(scrollYProgress, [0, 1], ['0%', '-30%'])
+
+  return (
+    <section ref={ref} className="h-[200vh] relative">
+      <motion.img
+        src="/hero.jpg"
+        style={{ y }}
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+    </section>
+  )
+}
+```
+
+### `offset` 参数
+
+定义"什么时候开始 / 结束"。两元素的字符串：
+
+```
+[元素的位置, 视口的位置]
+```
+
+| 元素位置 | 视口位置 | 含义 |
+| -------- | -------- | ---- |
+| `'start end'` | 元素顶部 | 视口底部 | 元素**刚要出现** |
+| `'end start'` | 元素底部 | 视口顶部 | 元素**刚要消失** |
+| `'start start'` | 元素顶部 | 视口顶部 | 元素顶部到达视口顶 |
+| `'center center'` | 元素中心 | 视口中心 | 元素居中 |
+
+`offset: ['start end', 'end start']` 表示"从元素刚进入视口到完全离开"——最常用的"整段可见区间"。
+
+> 想象一根游标卡尺：第一个字符串描述"卡尺起点"，第二个描述"卡尺终点"。
+
+## 视差效果
+
+```tsx filename="components/Parallax.tsx"
+import { motion, useScroll, useTransform } from 'motion/react'
+import { useRef } from 'react'
+
+export function ParallaxHero() {
+  const ref = useRef<HTMLDivElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start start', 'end start'],  // 元素顶到视口顶 → 元素底到视口顶
+  })
+
+  const y = useTransform(scrollYProgress, [0, 1], ['0%', '-150%'])
+  const opacity = useTransform(scrollYProgress, [0, 0.5, 1], [1, 0.5, 0])
+
+  return (
+    <div ref={ref} className="h-screen overflow-hidden">
+      <motion.div style={{ y, opacity }}>
+        <h1>Hero Title</h1>
+      </motion.div>
+    </div>
+  )
+}
+```
+
+效果：滚动时标题以比页面慢的速度上移并淡出——经典视差。
+
+## 横向滚动驱动
+
+把页面滚动转化为横向运动：
+
+```tsx filename="components/HorizontalScroll.tsx"
+import { motion, useScroll, useTransform } from 'motion/react'
+import { useRef } from 'react'
+
+export function HorizontalScroll() {
+  const ref = useRef<HTMLDivElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start start', 'end end'],
+  })
+
+  const x = useTransform(scrollYProgress, [0, 1], ['0%', '-66%'])
+
+  return (
+    <section ref={ref} className="h-[300vh]">
+      <div className="sticky top-0 h-screen overflow-hidden">
+        <motion.div style={{ x }} className="flex h-full">
+          <div className="w-screen shrink-0">Slide 1</div>
+          <div className="w-screen shrink-0">Slide 2</div>
+          <div className="w-screen shrink-0">Slide 3</div>
+        </motion.div>
+      </div>
+    </section>
+  )
+}
+```
+
+外层 `300vh` 给滚动空间，内层 `sticky` 固定在视口，里面的内容随滚动水平偏移——"滚动变横滑"。
+
+## 章节高亮
+
+监听元素位置，给当前章节加高亮：
+
+```tsx filename="components/NavSpy.tsx"
+import { useScroll, useMotionValueEvent } from 'motion/react'
+import { useRef, useState } from 'react'
+
+function Section({ id, children, onActive }: Props) {
+  const ref = useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start center', 'end center'],
+  })
+
+  useMotionValueEvent(scrollYProgress, 'change', latest => {
+    if (latest > 0.4 && latest < 0.6) onActive(id)
+  })
+
+  return <section ref={ref} id={id}>{children}</section>
+}
+```
+
+`useMotionValueEvent` 监听值变化但不触发渲染——只在跨过阈值时 setState。
+
+## 平滑滚动跟随
+
+直接用 `scrollYProgress` 控制 transform，滚动很猛时动画也会很猛——配 `useSpring` 平滑：
+
+```tsx
+import { useScroll, useSpring, useTransform } from 'motion/react'
+
+function SmoothProgress() {
+  const { scrollYProgress } = useScroll()
+  const smooth = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+  })
+
+  return (
+    <motion.div
+      style={{ scaleX: smooth, transformOrigin: 'left' }}
+      className="fixed top-0 inset-x-0 h-1 bg-blue-500"
+    />
+  )
+}
+```
+
+进度条会"软"地跟上滚动条而不是死板贴合——观感更高级。
+
+## SVG 路径绘制（结合 useScroll）
+
+```tsx filename="components/ScrollPath.tsx"
+import { motion, useScroll } from 'motion/react'
+
+export function ScrollPath() {
+  const { scrollYProgress } = useScroll()
+  return (
+    <svg width="200" height="200" viewBox="0 0 200 200">
+      <motion.circle
+        cx="100" cy="100" r="80"
+        stroke="#3b82f6" strokeWidth="4" fill="none"
+        style={{ pathLength: scrollYProgress }}
+      />
+    </svg>
+  )
+}
+```
+
+`pathLength` 是 Motion 提供的虚拟属性——0 到 1 控制 SVG 描边的可见长度。滚动时圆圈被一笔画出来。详见 [SVG 动画](/motion/motion-svg)。
+
+## 与 Motion 的混合引擎
+
+Motion 在支持 `ScrollTimeline` 的浏览器上会用**原生**滚动驱动——不需要 JS 每帧更新，性能逼近原生 CSS `animation-timeline`。
+
+> 已支持 `ScrollTimeline`：Chrome 115+、Edge 115+；Safari / Firefox 跟进中。不支持的浏览器自动回落 JS 实现，开发者无感。
+
+## 陷阱
+
+### 1. 容器没有可滚动高度
+
+```tsx
+// ❌ 父容器没有撑开高度，永远不滚
+<div ref={ref}>
+  <motion.div style={{ y: scrollY }} />
+</div>
+```
+
+`useScroll` 监听的是文档或目标容器的滚动条——容器没有内容溢出就不会滚。检查 CSS `min-h-screen` / `h-[200vh]` 之类。
+
+### 2. `offset` 写错
+
+`offset: ['start end', 'end start']` 表示"刚出现到刚消失"——常被搞反成 `['end start', 'start end']`。记住：**第一个字符串描述滚动起点、第二个描述终点**。
+
+### 3. 直接用 `scrollY` 算百分比
+
+```tsx
+// ❌ 屏幕高度变了就崩溃
+const y = useTransform(scrollY, [0, 800], ['0%', '100%'])
+
+// ✅ 用 progress（已归一化）
+const y = useTransform(scrollYProgress, [0, 1], ['0%', '100%'])
+```
+
+`scrollY` 是绝对像素，`scrollYProgress` 是 0~1——优先用后者。
+
+### 4. 在 SSR 框架里直接调用
+
+Next.js 等 SSR 框架中，`useScroll` 内部访问 `window`——必须在 Client Component（`'use client'`）里用。
+
+### 5. 与 ScrollTrigger 混用
+
+如果同一页面同时用 Motion 的 `useScroll` 和 GSAP ScrollTrigger，两者各自抢用 `scroll` 事件——多数场景不冲突，但 ScrollSmoother 的劫持模式会让 Motion 的 `useScroll` 失灵。选一个用。
+
+## 实战配方
+
+### 顶部进度条
+
+```tsx
+function TopProgress() {
+  const { scrollYProgress } = useScroll()
+  const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30 })
+  return (
+    <motion.div
+      className="fixed inset-x-0 top-0 h-0.5 bg-blue-500 origin-left z-50"
+      style={{ scaleX }}
+    />
+  )
+}
+```
+
+### 滚动到底部触发
+
+```tsx
+function ScrollEndDetector({ onEnd }: { onEnd: () => void }) {
+  const { scrollYProgress } = useScroll()
+  useMotionValueEvent(scrollYProgress, 'change', latest => {
+    if (latest > 0.95) onEnd()
+  })
+  return null
+}
+```
+
+### 滚动模糊导航
+
+导航栏滚动后加阴影：
+
+```tsx
+function Nav() {
+  const { scrollY } = useScroll()
+  const [shadow, setShadow] = useState(false)
+  useMotionValueEvent(scrollY, 'change', y => setShadow(y > 20))
+  return <header className={shadow ? 'shadow' : ''}>...</header>
+}
+```
+
+## 小结
+
+- `whileInView` 适合"滚到才播放一次"
+- `useScroll` 适合"动画跟随滚动条位置"
+- `offset` 是个二元字符串：元素相对视口的起点 / 终点
+- 用 `scrollYProgress`（归一化 0~1）而不是 `scrollY`（绝对像素）
+- 配 `useSpring` 平滑滚动跟随
+- 在 SSR 框架里用必须是 Client Component
+- 复杂叙事（pin + 多阶段）请用 [GSAP ScrollTrigger](/motion/gsap-scroll-trigger)——Motion 的 useScroll 不擅长那个场景

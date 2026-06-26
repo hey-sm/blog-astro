@@ -1,0 +1,253 @@
+---
+title: React 高阶面试题
+description: React 高阶核心考察点梳理，涵盖 React-Router、性能优化、错误边界、高阶组件、服务端渲染与 React 18 新特性
+---
+
+# React 高阶面试题
+
+本文梳理了 React 面试高阶篇的核心考察点，涵盖 React-Router、性能优化、错误边界、高阶组件（HOC）、服务端渲染（SSR）以及 React 18+ 新特性。
+
+---
+
+## 一、React-Router
+
+### 核心作用
+
+SPA 导航、URL 与组件映射、浏览器历史记录管理（前进/后退）。
+
+### 路由器类型
+
+- **`BrowserRouter`**：使用 HTML5 History API（`pushState`/`replaceState`），URL 形如 `example.com/path`
+- **`HashRouter`**：使用 URL hash（`example.com/#/path`），兼容不支持 History API 的旧浏览器
+
+### 版本差异（v5 vs v6）
+
+| 特性 | v5 | v6 |
+|------|-----|-----|
+| 路由匹配 | 顺序匹配所有 Route | `Routes` 优先精确匹配 |
+| 组件渲染 | `component={Users}` | `element={<Users />}` |
+| 嵌套路由 | 子组件内定义 + `this.props.children` | 父 Route 内嵌套 + `<Outlet />` |
+| 重定向 | `Redirect` | `Navigate` |
+| 编程式导航 | `useHistory` | `useNavigate` |
+
+```jsx
+// v6 嵌套路由
+<Route path="/users" element={<Users />}>
+  <Route path=":id" element={<UserDetail />} />
+</Route>
+// Users 组件用 <Outlet /> 渲染子路由
+
+// 动态参数
+const { userId } = useParams()
+
+// 编程式导航
+const navigate = useNavigate()
+navigate('/dashboard', { state: { from: '/login' } })
+```
+
+### 常见场景
+
+```jsx
+// 路由守卫
+function PrivateRoute({ children }) {
+  const isAuth = useAuth()
+  return isAuth ? children : <Navigate to="/login" />
+}
+
+// 404 页面：通配符放最后
+<Route path="*" element={<NotFound />} />
+
+// 懒加载
+const Users = React.lazy(() => import('./Users'))
+<Route path="/users" element={
+  <Suspense fallback={<Loading />}><Users /></Suspense>
+} />
+```
+
+### 高频面试题
+
+- **BrowserRouter 与 HashRouter 区别？** 前者用 History API、URL 美观；后者用 hash、兼容旧浏览器。
+- **v6 重大改进？** `Routes` 代替 `Switch`、嵌套路由更简洁、`Navigate` 代替 `Redirect`、`element` 传 JSX。
+- **为什么 v5 需要 `exact`？** 确保路径完全匹配；v6 默认精确匹配，无需此属性。
+
+---
+
+## 二、性能优化
+
+### 核心思路
+
+减少不必要渲染、降低计算开销、优化 DOM 操作、合理加载资源。
+
+### 关键策略
+
+#### 1. 组件渲染控制
+
+```jsx
+// 函数组件浅比较
+const Memo = React.memo(Component, (prev, next) => prev.id === next.id)
+
+// 类组件：PureComponent 自动浅比较，或手动 shouldComponentUpdate
+class Optimized extends React.PureComponent { /* ... */ }
+```
+
+#### 2. 高效数据管理
+
+```js
+const processedData = useMemo(() => transformData(rawData), [rawData]) // 缓存计算
+const handleClick = useCallback(() => submitData(id), [id])            // 稳定函数引用
+// 状态结构扁平化，避免深层嵌套
+```
+
+#### 3. 列表渲染优化
+
+- `key` 使用唯一稳定标识（避免索引）
+- 长列表用虚拟滚动（`react-window`）
+
+#### 4. 资源加载优化
+
+- 代码分割：`React.lazy` + `Suspense`
+- 图片懒加载：`IntersectionObserver`
+
+### 性能分析工具
+
+- **React DevTools Profiler**：记录组件渲染耗时、查看渲染原因
+- **Chrome Performance**：分析 JS 执行耗时、识别长任务
+- **Lighthouse**：评估 FCP/TTI/TBT 等指标
+
+### 常见性能陷阱
+
+| 问题 | 解决方案 |
+|------|---------|
+| 不必要的 Context 更新 | 拆分多个 Context，`useMemo` 缓存 Provider 值 |
+| 过度使用 useMemo | 仅对高开销计算使用 |
+| 内存泄漏 | 及时清理定时器、监听器、订阅 |
+| 大状态对象更新 | 用 Immer 实现不可变更新，避免深拷贝 |
+
+⚠️ **黄金法则**：优先用 Profiler 定位瓶颈，避免过早优化。
+
+---
+
+## 三、高级特性
+
+### 1. 错误边界（Error Boundary）
+
+捕获**子组件树**渲染期间的 JS 错误，展示降级 UI，防止整个应用崩溃。必须用**类组件**实现：
+
+```jsx
+class ErrorBoundary extends React.Component {
+  state = { hasError: false }
+  static getDerivedStateFromError(error) { // 渲染阶段：返回新 state
+    return { hasError: true }
+  }
+  componentDidCatch(error, errorInfo) {    // 提交阶段：上报错误
+    logErrorToService(error, errorInfo)
+  }
+  render() {
+    return this.state.hasError ? <h1>Something went wrong.</h1> : this.props.children
+  }
+}
+```
+
+| ✅ 可捕获 | ❌ 无法捕获 |
+|----------|------------|
+| 子组件渲染期间错误 | 事件处理器错误（需手动 try/catch） |
+| 生命周期方法错误 | 异步代码（`setTimeout`、`fetch`） |
+| 构造函数错误 | SSR 错误、错误边界自身错误 |
+
+- **函数组件能作为错误边界吗？** 不能，必须用类组件生命周期实现。
+- **错误边界自身错误如何处理？** 冒泡到上层错误边界；无父级则应用崩溃。
+
+### 2. 高阶组件（HOC）
+
+接受一个组件、返回增强后新组件的**函数**（组件工厂），用于逻辑复用。
+
+```jsx
+// 属性代理（最常用）
+function withLogging(WrappedComponent) {
+  return class extends React.Component {
+    componentDidMount() { console.log('mounted:', WrappedComponent.name) }
+    render() { return <WrappedComponent {...this.props} /> } // 透传 props
+  }
+}
+const Enhanced = withLogging(MyComponent)
+```
+
+**注意事项**：不修改原组件、透传无关 props、用 `hoist-non-react-statics` 复制静态方法、用 `forwardRef` 转发 ref。
+
+| 维度 | HOC | Hooks |
+|------|-----|-------|
+| 适用类型 | 类/函数组件 | 仅函数组件 |
+| 复用方式 | 包裹组件，形成层级 | 组件内直接调用 |
+| 代码组织 | 多层嵌套，可读性下降 | 扁平化，易追踪 |
+
+⚠️ **性能陷阱**：不要在 `render` 中创建 HOC（导致子组件重新挂载），应在组件外部定义。典型应用：Redux `connect`、`withRouter`。
+
+### 3. 服务端渲染（SSR）
+
+**核心优势**：SEO 友好、首屏性能优化、兼容性保障。
+
+| 方案 | 特点 | 适用场景 |
+|------|------|---------|
+| Next.js | 开箱即用、约定式路由、SSG/SSR/ISR | 全栈、SEO 要求高 |
+| Gatsby | 基于 GraphQL 的静态生成 | 内容型网站 |
+| 自定义 SSR | 灵活控制、深度定制 | 复杂企业级应用 |
+| React Server Components | 服务端/客户端组件结合 | 动静混合场景 |
+
+```js
+// Next.js 页面级 SSR
+export async function getServerSideProps(context) {
+  const data = await fetchData(context.params.id)
+  return { props: { data } }
+}
+
+// 增量静态再生（ISR）
+export async function getStaticProps() {
+  return { props: { /* ... */ }, revalidate: 60 } // 最多每 60s 重新生成
+}
+
+// 客户端水合（Hydration）
+import { hydrateRoot } from 'react-dom/client'
+hydrateRoot(document.getElementById('root'), <App />)
+```
+
+**常见问题**：客户端-服务端状态不一致（用 Redux/Context 同步初始状态）、`window` 未定义（`typeof window !== 'undefined'` 判断）、样式闪烁 FOUC。
+
+### 4. React 18+ 新特性
+
+#### 并发渲染（Concurrent Rendering）
+
+渲染过程可中断，优先处理高优先级任务（如用户输入）。
+
+```js
+// startTransition：标记非紧急更新
+startTransition(() => setSearchQuery(query))
+
+// useTransition：跟踪过渡状态
+const [isPending, startTransition] = useTransition()
+```
+
+#### 自动批处理（Automatic Batching）
+
+React 18 默认将 `setTimeout`/`Promise` 中的多次更新也合并为单次渲染（React 17 仅事件处理器内批处理）。需立即同步渲染用 `flushSync`。
+
+#### 新根 API
+
+```js
+// React 17：ReactDOM.render(<App />, root)
+// React 18：启用并发功能
+const root = ReactDOM.createRoot(document.getElementById('root'))
+root.render(<App />)
+```
+
+#### 新 Hooks
+
+- **`useId`**：生成稳定唯一 ID，解决 SSR 客户端/服务端 ID 不一致
+- **`useDeferredValue`**：延迟更新非关键 UI，保持高优先级交互流畅
+- **`useSyncExternalStore`**：简化外部 store 集成，避免并发渲染下的撕裂（tearing）
+
+#### 流式 SSR
+
+`renderToPipeableStream` 分块传输 HTML + 选择性水合，结合 `Suspense` 优化首屏体验。
+
+---
+

@@ -24,7 +24,7 @@ const idFull = `${id}-full`;
       <path d="M18 6L6 18M6 6l12 12"></path>
     </svg>
   </button>
-  <!-- 普通模式 SVG（展开2层）-->
+  <!-- 普通模式 SVG（展开3层）-->
   <svg id={id} class="markmap-svg w-full h-full absolute inset-0"></svg>
   <!-- 全屏模式 SVG（展开所有层级，初始隐藏）-->
   <svg id={idFull} class="markmap-svg w-full h-full absolute inset-0 invisible pointer-events-none"></svg>
@@ -69,9 +69,22 @@ const idFull = `${id}-full`;
   const transformer = new Transformer();
   // 容器 -> { mmNormal, mmFull, containerNormal, containerFull }
   const instances = new WeakMap();
+  // 记录 { container, observer }，用于在 SPA 导航后断开已脱离 DOM 的观察者
+  const activeObservers = new Set<{ container: Element; observer: ResizeObserver }>();
+
+  // 断开已从 DOM 移除的容器对应的 ResizeObserver，避免 SPA 导航累积泄漏
+  function cleanupDetachedObservers() {
+    for (const entry of activeObservers) {
+      if (!entry.container.isConnected) {
+        entry.observer.disconnect();
+        activeObservers.delete(entry);
+      }
+    }
+  }
 
   // 初始化当前页面所有未渲染的 markmap 容器
   function initMarkmaps() {
+    cleanupDetachedObservers();
     const containers = document.querySelectorAll('svg[id^="markmap-"]:not([id$="-full"]):not([data-mm-ready])');
 
     containers.forEach((container) => {
@@ -86,7 +99,7 @@ const idFull = `${id}-full`;
         const { root } = transformer.transform(markdown);
         const { root: rootFull } = transformer.transform(markdown);
 
-        // 创建普通模式实例（展开2层）
+        // 创建普通模式实例（展开3层）
         const mmNormal = Markmap.create(container, {
           duration: 0,
           maxWidth: 300,
@@ -136,20 +149,29 @@ const idFull = `${id}-full`;
             inst.mmFull.fit();
           }
         });
-        observer.observe(container.parentElement);
+        const wrapper = container.parentElement;
+        if (wrapper) {
+          observer.observe(wrapper);
+          activeObservers.add({ container, observer });
+        }
 
         // 全屏按钮
         const btn = container.parentElement?.querySelector('.fullscreen-btn');
         btn?.addEventListener('click', () => {
           const wrap = container.parentElement;
           if (document.fullscreenElement) {
-            document.exitFullscreen();
+            document.exitFullscreen().catch(() => {});
           } else {
-            wrap?.requestFullscreen();
+            wrap?.requestFullscreen()?.catch(() => {});
           }
         });
       } catch (e) {
         console.error('Failed to initialize markmap:', e);
+        // 渲染失败时把加载遮罩文案改为错误提示，避免永久停留在“加载中...”
+        const loadingText = container.parentElement?.querySelector('.markmap-loading div');
+        if (loadingText) {
+          loadingText.textContent = '思维导图渲染失败';
+        }
       }
     });
   }

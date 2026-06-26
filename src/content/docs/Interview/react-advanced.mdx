@@ -1,0 +1,380 @@
+---
+title: React 进阶面试题
+description: React 进阶核心考察点梳理，涵盖合成事件、渲染优化、Hooks 原理、虚拟 DOM Diff、Fiber 架构与状态管理
+---
+
+# React 进阶面试题
+
+本文梳理了 React 面试进阶篇的核心考察点，涵盖合成事件机制、组件渲染优化、Hooks 原理、虚拟 DOM Diff 算法、Fiber 架构以及状态管理方案。
+
+---
+
+## 一、核心机制
+
+### 1. 合成事件机制
+
+#### 设计目的
+
+- **跨浏览器一致性**：统一不同浏览器的事件接口（如 `event.target` 行为），抹平兼容性差异
+- **性能优化**：通过事件委托将事件绑定到根节点，而非每个子元素；通过事件池化复用事件对象，减少内存开销
+- **扩展能力**：支持自定义事件类型与事件优先级调度
+
+#### 事件委托的演进
+
+| React 版本 | 委托层级 | 核心变化 |
+|-----------|---------|---------|
+| 16.x 及之前 | 委托到 `document` | 多 React 应用共存时事件可能冲突 |
+| 17.x 及之后 | 委托到应用根 DOM 节点 | 隔离不同 React 版本的事件系统，避免全局污染 |
+
+```js
+// React 17+ 事件委托结构
+const rootNode = document.getElementById('root')
+ReactDOM.render(<App />, rootNode)
+// 所有 React 事件监听器绑定到 rootNode 而非 document
+```
+
+#### 合成事件对象与事件池化
+
+```js
+function handleClick(event) {
+  // ❌ 错误：异步访问事件属性，event 已被回收
+  setTimeout(() => {
+    console.log(event.target) // null
+  }, 100)
+
+  // ✅ 正确：persist() 禁用事件池化，保留引用
+  event.persist()
+  setTimeout(() => {
+    console.log(event.target) // 正常输出
+  }, 100)
+}
+```
+
+> 注：事件池化是 React 16 的机制，React 17 起已移除，无需再调用 `persist()`。
+
+#### 事件执行顺序
+
+原生事件与合成事件混用时的完整顺序：
+
+```
+原生事件（捕获） → 原生事件（目标） → React 事件（捕获）
+→ React 事件（目标） → React 事件（冒泡） → 原生事件（冒泡）
+```
+
+⚠️ **注意**：`e.stopPropagation()` 仅阻止 React 合成事件传播，不影响原生事件。需同时阻止原生事件：
+
+```js
+const handleClick = (e) => {
+  e.stopPropagation()
+  e.nativeEvent.stopImmediatePropagation() // 阻止原生事件
+}
+```
+
+#### 高频面试题
+
+- **为什么 React 不直接把事件绑定在元素上？** 事件委托减少内存占用，组件动态更新时无需重新绑定。
+- **合成事件和原生事件的区别？** 合成事件跨浏览器统一行为、有 React 抽象层；原生事件直接操作 DOM。
+
+---
+
+### 2. 组件更新触发条件与渲染优化
+
+#### 更新触发条件
+
+| 触发条件 | 说明 |
+|---------|------|
+| State 变化 | `useState` / `useReducer` / `this.setState` 更新状态 |
+| Props 变化 | 父组件重渲染导致传入的 props 改变 |
+| Context 更新 | 订阅的 Context 数据变更 |
+| 父组件重渲染 | 即使子组件 props 未变，默认仍会重渲染子组件 |
+| 强制更新 | 类组件调用 `this.forceUpdate()` |
+| Hooks 依赖变化 | `useEffect` / `useMemo` / `useCallback` 依赖数组变更 |
+
+#### 渲染机制核心
+
+- **渲染流程**：触发更新 → 生成虚拟 DOM → Diff 算法比较 → 确定更新范围 → 提交到真实 DOM
+- **协调策略**：仅对比同层级节点（时间复杂度 O(n)）；用 `key` 帮助识别元素移动/复用
+
+#### 优化手段
+
+- **阻断无效更新**：函数组件用 `React.memo`，类组件用 `PureComponent` / `shouldComponentUpdate`
+
+```js
+const MemoizedComponent = React.memo(MyComponent, (prev, next) => {
+  return prev.id === next.id // 自定义 props 比较
+})
+```
+
+- **缓存计算与函数引用**：
+
+```js
+const expensiveValue = useMemo(() => computeValue(a, b), [a, b])
+const handleClick = useCallback(() => { /* ... */ }, [a])
+```
+
+- **列表优化**：长列表用虚拟滚动（`react-window` / `react-virtualized`），`key` 使用唯一标识而非索引
+
+```js
+// ❌ 错误：用索引作为 key
+{items.map((item, index) => <Item key={index} />)}
+// ✅ 正确：用唯一标识
+{items.map(item => <Item key={item.id} />)}
+```
+
+- **用 children 阻断更新**：通过 `children` props 传入的内容不会因父组件状态变化而重渲染
+
+#### 高频面试题
+
+- **useMemo 一定能提升性能吗？** 不一定。仅当计算开销大且依赖稳定时使用，否则依赖对比反而增加开销。
+- **如何优化 Context 引起的渲染？** 拆分多个 Context、用 `useContextSelector` 按需订阅。
+
+---
+
+### 3. Hooks 核心原理
+
+#### 设计目标
+
+- **逻辑复用**：解决 HOC 和 Render Props 的嵌套地狱
+- **简化组件**：告别 `this` 绑定与分散的生命周期逻辑
+- **函数式优先 & 渐进式升级**
+
+#### 核心原理
+
+- **闭包与链表存储**：Hooks 数据存储在 Fiber 节点的 `memoizedState` 属性中，通过单向链表管理。每个 Hook 闭包捕获当次渲染的 props/state 快照。
+
+```js
+// Fiber 节点结构示意
+const fiber = {
+  memoizedState: {
+    memoizedState: '状态值',  // useState 的状态
+    next: {                  // 下一个 Hook
+      memoizedState: [],     // useEffect 的依赖数组
+      next: null,
+    },
+  },
+}
+```
+
+- **执行顺序依赖**：Hooks 调用顺序在每次渲染必须严格一致，因此**必须在顶层调用**，不能放在条件/循环中。
+- **只能在函数组件中使用**：Hooks 需绑定当前组件的 Fiber 节点，普通函数无此上下文。
+
+#### 闭包陷阱
+
+```js
+function Timer() {
+  const [count, setCount] = useState(0)
+
+  // ❌ 错误：空依赖 + 直接引用 count，始终捕获初始值 0
+  useEffect(() => {
+    const timer = setInterval(() => setCount(count + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // ✅ 正确：函数式更新获取最新值
+  useEffect(() => {
+    const timer = setInterval(() => setCount(c => c + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
+}
+```
+
+**解决方案**：函数式更新、精准声明依赖数组、用 `useRef` 穿透闭包访问最新值。
+
+---
+
+### 4. 常用 Hooks
+
+| 分类 | Hook | 作用 |
+|------|------|------|
+| 基础 | `useState` | 函数组件状态管理 |
+| 基础 | `useEffect` | 处理副作用（请求、订阅、DOM） |
+| 基础 | `useContext` | 跨层级传递数据 |
+| 性能 | `useMemo` | 缓存计算结果 |
+| 性能 | `useCallback` | 缓存函数引用 |
+| 进阶 | `useReducer` | 复杂状态逻辑管理（类 Redux） |
+| 进阶 | `useRef` | 访问 DOM / 保存可变值（不触发渲染） |
+| 进阶 | `useLayoutEffect` | 同步执行副作用（绘制前完成 DOM 修改） |
+| 特殊 | `useImperativeHandle` | 自定义暴露给父组件的实例方法 |
+
+#### useEffect 生命周期映射
+
+```js
+useEffect(() => {
+  const subscription = props.source.subscribe()
+  return () => subscription.unsubscribe() // componentWillUnmount
+}, [props.source]) // [] → didMount；[dep] → didUpdate
+```
+
+#### 高频面试题
+
+- **useEffect vs useLayoutEffect？** 前者异步执行（不阻塞渲染）；后者同步执行（DOM 更新后、浏览器绘制前）。
+- **useMemo vs React.memo？** `useMemo` 缓存值；`React.memo` 缓存组件渲染结果。
+- **如何避免 useEffect 无限循环？** 正确设置依赖数组，用 `useCallback`/`useMemo` 稳定引用。
+
+---
+
+### 5. 虚拟 DOM Diff 算法原理
+
+#### 核心设计思想
+
+基于两个假设以 O(n) 完成树比较：
+
+- **类型差异假设**：不同类型的元素生成不同树结构，直接替换整个子树
+- **Key 稳定性假设**：通过 `key` 标识同层级元素是否可复用
+
+#### 分层对比策略
+
+React 逐层递归比较，**不跨层级追踪节点**：
+
+```
+旧树：<div>        新树：<section>
+       <A/>              <A/>
+       <B/>              <B/>
+     </div>           </section>
+处理逻辑：div → section 类型不同，直接销毁整个 div 子树，重建 section 子树
+```
+
+#### 元素类型处理
+
+- **类型相同**：仅更新变化的属性（`className`、`style`），递归比较子节点
+- **类型不同**：销毁旧子树（触发 `componentWillUnmount`）→ 创建新子树（`constructor → render → componentDidMount`）
+
+#### key 的优化机制
+
+| 场景 | 无 Key | 有 Key |
+|------|--------|--------|
+| 列表项顺序变化 | 索引变化导致全部重渲染 | 识别移动项，仅调整 DOM 顺序 |
+| 中间插入项 | 后续项索引变化触发多节点更新 | 仅插入新节点 |
+| 删除中间项 | 后续项索引变化触发多节点更新 | 仅删除目标节点 |
+
+#### 高频面试题
+
+- **为什么列表必须用 key？** 帮助 React 识别元素身份，顺序变化时高效复用 DOM，避免不必要的重渲染和表单状态错乱。
+- **如何强制组件重新挂载？** 改变 `key` 值触发销毁/重建：`<UserProfile key={user.id} />`。
+- **Diff 能完全避免 DOM 操作吗？** 不能，目的是最小化操作次数。
+
+---
+
+### 6. Fiber 架构
+
+#### 诞生背景
+
+旧版协调算法递归不可中断，长时间占用主线程导致卡顿掉帧。Fiber 的目标是实现**增量渲染**，支持异步可中断的更新。
+
+#### 核心设计思想
+
+- **时间切片**：将渲染任务拆分为多个小任务（Fiber 节点），利用浏览器空闲时段分片执行
+- **优先级调度**：用户交互优先于数据更新
+- **可恢复工作单元**：保存中间状态，允许暂停/恢复
+
+#### Fiber 节点核心属性
+
+| 属性 | 作用 |
+|------|------|
+| `type` | 组件类型（如 `'div'`、函数组件引用） |
+| `stateNode` | 对应的 DOM 节点或类组件实例 |
+| `child` / `sibling` / `return` | 第一个子节点 / 兄弟节点 / 父节点 |
+| `pendingProps` / `memoizedProps` | 新传入 props / 上次渲染 props |
+| `memoizedState` | 上次渲染后的 state（如 Hooks 链表） |
+| `effectTag` | 副作用类型（Placement / Update / Deletion） |
+| `alternate` | 指向镜像 Fiber（用于 Diff 比较） |
+
+#### 双缓冲机制
+
+React 维护两棵 Fiber 树确保更新无冲突：
+
+- **Current Tree**：当前已渲染 UI 对应的树
+- **WorkInProgress Tree**：正在构建的新树
+- **切换**：更新完成后，WorkInProgress Tree 变为 Current Tree
+
+#### 渲染两阶段
+
+| 阶段 | 目标 | 特点 |
+|------|------|------|
+| 协调阶段（Reconciliation） | 生成副作用列表，不修改 DOM | **可中断**，根据时间片暂停/恢复 |
+| 提交阶段（Commit） | 同步执行所有 DOM 变更 | **不可中断**，避免 UI 不一致 |
+
+#### 对生命周期的影响
+
+- **废弃**：`componentWillMount`、`componentWillReceiveProps`、`componentWillUpdate`（异步渲染可能多次调用引发副作用错误）
+- **新增**：`getDerivedStateFromProps`、`getSnapshotBeforeUpdate`
+
+#### 高频面试题
+
+- **Fiber 如何实现可中断更新？** 用链表结构存储节点并记录遍历进度，每处理一个 Fiber 后检查剩余时间片，不足时保存进度交还浏览器。
+- **为什么需要双缓冲？** 保证渲染过程中 Current Tree 始终完整可用。
+
+---
+
+## 二、状态管理
+
+### 1. 核心诉求
+
+组件通信、状态同步、副作用管理、调试追踪。
+
+### 2. React 内置方案
+
+- **组件状态（useState / useReducer）**：组件内部私有状态
+- **Context API**：中低频次更新的全局状态（主题、用户身份）
+
+```js
+// 拆分多个 Context + memo 防止无关组件重渲染
+const ThemeContext = createContext()
+const UserContext = createContext()
+
+const UserPanel = memo(() => {
+  const user = useContext(UserContext)
+  return <div>{user.name}</div>
+})
+```
+
+### 3. 主流状态管理库对比
+
+| 方案 | 核心模式 | 优点 | 缺点 | 适用场景 |
+|------|---------|------|------|---------|
+| **Redux** | 单一 Store + Flux | 严格数据流、中间件生态强 | 样板代码多、学习曲线陡 | 大型复杂应用、时间旅行调试 |
+| **MobX** | 响应式编程 | 代码简洁、自动追踪依赖 | 黑盒机制、过度渲染风险 | 中小型、快速开发 |
+| **Recoil** | 原子状态 + Selector | 细粒度控制、原生支持异步 | 较新、生态不成熟 | 局部状态优化 |
+| **Zustand** | 轻量 Store | API 简单、无样板代码 | 功能相对基础 | 中小项目、替代部分 Redux |
+| **Context + Hooks** | 组合式状态 | 零依赖、React 原生 | 性能问题、缺中间件 | 简单全局状态 |
+
+### 4. Redux 核心原理
+
+**三大原则**：单一数据源、State 只读（通过 Action 修改）、纯函数 Reducer。
+
+```js
+// 现代 Redux（Redux Toolkit）
+const counterSlice = createSlice({
+  name: 'counter',
+  initialState: 0,
+  reducers: {
+    increment: state => state + 1,
+    decrement: state => state - 1,
+  },
+})
+
+const store = configureStore({
+  reducer: { counter: counterSlice.reducer },
+})
+```
+
+**中间件**：`redux-thunk` 处理异步逻辑、日志中间件记录 action。
+
+### 5. 选型建议
+
+| 维度 | 推荐 |
+|------|------|
+| 小型应用 | Context + useState/useReducer |
+| 中大型应用 | Redux / MobX |
+| 高频更新 | Recoil 原子状态 |
+| 复杂异步 | Redux + Saga/Thunk |
+| 快速迭代 | Zustand / Jotai |
+
+### 6. 高频面试题
+
+- **Redux 如何避免不必要的重渲染？** 用 `reselect` 创建记忆化 Selector，结合 `React.memo` 浅比较。
+- **MobX 响应式原理？** 通过 Proxy / `Object.defineProperty` 追踪属性访问，自动建立观察者关系。
+- **如何解决 Context 性能问题？** 拆分多个 Context，用 `useMemo` 缓存 Provider 的 `value`。
+- **不可变性为何重要？** 保证状态变更可预测、支持浅比较优化。
+
+---
